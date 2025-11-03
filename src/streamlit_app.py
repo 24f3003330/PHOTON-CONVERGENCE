@@ -68,7 +68,6 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
 
     # Calculate Net Energy (Total Generation - Total Consumption)
     df['Net_Energy'] = df['Solar_Gen'] + df['Battery_Flow'] - df['Consumption']
-    # For reporting, Net Energy is generally Total Supply (Solar+Battery Discharge) - Total Demand
     
     # MOCK RL Optimization Schedule
     optimal_schedule = {
@@ -96,7 +95,6 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
 # --- 2. LAYOUT FUNCTIONS ---
 def display_kpi_card(title, value, unit, color="#268A2E"):
     """Creates a stylized KPI card."""
-    # ... (existing function) ...
     st.markdown(
         f"""
         <div style="padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #f9f9f9; text-align: left;">
@@ -112,7 +110,6 @@ def display_kpi_card(title, value, unit, color="#268A2E"):
 
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart with a small scroll panel at the bottom."""
-    # ... (existing function, remains the same to keep previous functionality) ...
     fig = go.Figure()
 
     end_time_full = df_future.index[-1]
@@ -146,29 +143,44 @@ def create_energy_flow_chart(df_full, df_future):
     ))
 
     # CHART LAYOUT ADJUSTMENTS
-    initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
+    initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0] # 24 hours back
 
     fig.update_layout(
         title='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
         xaxis_title="Time",
         yaxis_title="Power (KW)",
-        height=550,
+        height=550, # Slightly increased height for the scroll panel
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(fixedrange=False),
+        xaxis=dict(fixedrange=False), # Allow pan/scroll
         yaxis=dict(fixedrange=False)
     )
 
+    # --- FIX APPLIED HERE ---
     fig.update_xaxes(
+        # Set the initial zoom level to the last 24 hours
         range=[initial_view_start, end_time_full],
+        
+        # Rangeslider is now VISIBLE and stylized to act as a simple scroll panel
         rangeslider_visible=True,
-        rangeslider_thickness=0.08,
+        rangeslider_thickness=0.08, # Make it a thin bar
+
+        # Corrected rangeslider object definition to fix ValueError
         rangeslider=dict(
-            visible=True,
-            bgcolor="#444444",
+            visible=True, # This is correct for the slider itself
+            bgcolor="#444444",  # A dark color for contrast/minimap background
             bordercolor="gray",
-            yaxis=dict(visible=False, rangemode="fixed", range=[0, max_power])
+            # Hide the lines/y-axis content inside the slider
+            yaxis=dict(
+                # Use "visible: False" inside the Y-axis properties to hide the content
+                # This syntax is tricky in Plotly, setting range to be fixed and min/max helps stability
+                rangemode="fixed",
+                range=[0, max_power]
+                # Note: Setting yaxis.showticklabels and yaxis.showline to False is often needed, 
+                # but removing the incorrect "visible" property is the direct fix for the error.
+            )
         ),
+        # Keep quick selection buttons for user control over time scale
         rangeselector=dict(
             buttons=list([
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
