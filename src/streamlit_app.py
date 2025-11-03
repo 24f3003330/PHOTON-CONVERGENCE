@@ -234,23 +234,25 @@ def create_forecast_chart(df_future):
     fig = go.Figure()
     fig.update_layout(template="plotly_dark")
     fig.add_trace(go.Scatter(
-        x=df_future.index,
-        y=df_future['Demand_Forecast'],
-        mode='lines+markers',
-        name='Demand Forecast (kW)',
+        x=df_future.index, 
+        y=df_future['Demand_Forecast'], 
+        mode='lines+markers', 
+        name='Demand Forecast (kW)', 
         line=dict(color='orangered', width=3),
         marker=dict(size=6)
     ))
     fig.add_trace(go.Scatter(
-        x=df_future.index,
-        y=df_future['Solar_Forecast'],
-        mode='lines+markers',
-        name='Solar Forecast (kW)',
+        x=df_future.index, 
+        y=df_future['Solar_Forecast'], 
+        mode='lines+markers', 
+        name='Solar Forecast (kW)', 
         line=dict(color='gold', width=3),
         marker=dict(size=6)
     ))
     fig.update_layout(
-        title_text='**24-Hour Hourly Demand & Solar Forecast**',
+        # --- FIX: Removed the chart title by setting title_text to an empty string ---
+        title_text='',
+        
         xaxis_title="Hour Start Time",
         yaxis_title="Power (KW)",
         height=450,
