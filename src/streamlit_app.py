@@ -147,7 +147,7 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     df_historical.index.name = 'Timestamp'
     return df_historical, df_future, optimal_schedule
 
-# --- 2. LAYOUT UTILITIES (Functions for Chart and KPI display) ---
+# --- 2. LAYOUT UTILITIES ---
 
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
@@ -419,8 +419,11 @@ def page_optimization(synthetic_data, optimal_schedule):
     
     st.header("Savings & Sustainability Impact (168H Simulation)")
     
-    baseline_import = synthetic_data['Consumption'].sum()
-    optimized_import = synthetic_data['Grid_Import'].sum()
+    # Calculate savings based on the last 7 days of the whole dataset
+    last_week_data = synthetic_data.tail(672)
+    baseline_import = last_week_data['Consumption'].sum()
+    optimized_import = last_week_data['Grid_Import'].sum()
+    
     estimated_savings_weekly = (baseline_import - optimized_import) * 0.1 
     daily_savings = estimated_savings_weekly / 7
     monthly_savings = estimated_savings_weekly * 4
@@ -544,13 +547,14 @@ def main_dashboard():
         st.info("Please ensure the CSV file is in the same directory as your Streamlit application script.")
         return 
 
-    # --- Page Routing ---
+    # --- Page Routing (FIX APPLIED HERE) ---
     if page == "Dashboard":
         page_dashboard(synthetic_data, df_future)
     elif page == "Forecast":
         page_forecast(df_future)
     elif page == "Battery Optimization":
-        page_optimization(synthetic_data, df_future, optimal_schedule)
+        # FIXED: Removed the extra df_future argument
+        page_optimization(synthetic_data, optimal_schedule)
     elif page == "Reports":
         page_reports(synthetic_data)
 
