@@ -59,6 +59,7 @@ def generate_mock_data(scenario_key):
     )
     
     # Grid Consumption (The optimized outcome)
+    # The actual power pulled from the grid after accounting for solar and battery
     df['Grid_Import'] = df['Consumption'] - df['Solar_Gen'] - df['Battery_Flow']
     df['Grid_Import'] = df['Grid_Import'].clip(lower=0)
     
@@ -71,9 +72,10 @@ def generate_mock_data(scenario_key):
     
     return df, optimal_schedule
 
-# --- 2. LAYOUT FUNCTIONS (Minor improvements for clarity) ---
+# --- 2. LAYOUT FUNCTIONS ---
 
 def display_kpi_card(title, value, unit, color="#268A2E"):
+    """Creates a stylized KPI card."""
     st.markdown(
         f"""
         <div style="padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #f9f9f9; text-align: left;">
@@ -87,14 +89,15 @@ def display_kpi_card(title, value, unit, color="#268A2E"):
         unsafe_allow_html=True
     )
 
-def create_energy_flow_chart(df, optimal_schedule):
+def create_energy_flow_chart(df):
     """Creates the Live Energy Flow chart and highlights the RL action."""
     fig = go.Figure()
-
-    # Highlight the RL Discharge Period for visual clarity
+    
+    # Retrieve the discharge hour from the currently active scenario for highlighting
     discharge_hour = SCENARIOS[st.session_state.scenario]['RL_Discharge_Hour']
     
-    # Add a subtle shape to highlight the optimization action time window
+    # Add a subtle shape to highlight the optimization action time window (RL Action)
+    # This visually connects the RL schedule to the real-time outcome
     fig.add_shape(
         type="rect",
         x0=datetime.now() - timedelta(minutes=60) + timedelta(hours=discharge_hour),
@@ -110,11 +113,11 @@ def create_energy_flow_chart(df, optimal_schedule):
     fig.add_trace(go.Scatter(x=df.index, y=df['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='orange', width=2)))
     fig.add_trace(go.Scatter(x=df.index, y=df['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='purple', width=3)))
     
-    # Battery Flow is shown via the discharge/charge fill
+    # Battery Flow: Discharge (Positive) and Charge (Negative) fill for visual clarity
     fig.add_trace(go.Scatter(x=df.index, y=df['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,128,0, 0.3)', line=dict(color='green', width=1)))
     fig.add_trace(go.Scatter(x=df.index, y=df['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(0,0,255, 0.3)', line=dict(color='blue', width=1)))
 
-    # MOCK FORECAST (Dotted line for predictive insights)
+    # MOCK FORECAST (Dotted line for predictive insights - XGBoost/LSTM output)
     forecast_points = int(len(df) * 0.1)
     mock_forecast = df['Consumption'].iloc[-forecast_points:].values * 1.05 
     fig.add_trace(go.Scatter(x=df.index[-forecast_points:], y=mock_forecast, mode='lines', name='Demand Forecast (ML)', line=dict(color='red', dash='dot')))
@@ -144,8 +147,7 @@ def main_dashboard():
         
     st.session_state.scenario = st.sidebar.selectbox(
         "Select Energy Scenario:",
-        list(SCENARIOS.keys()),
-        key='scenario'
+        list(SCENARIOS.keys())
     )
     
     st.sidebar.markdown("---")
@@ -159,9 +161,9 @@ def main_dashboard():
     )
     
     df, optimal_schedule = generate_mock_data(st.session_state.scenario)
-
-    # 3.2 REAL-TIME METRICS
     st.markdown("---")
+    
+    # 3.2 REAL-TIME METRICS
     st.subheader("📊 Real-time Power Flow")
     
     latest_data = df.iloc[-1]
@@ -177,12 +179,12 @@ def main_dashboard():
     with col4:
         display_kpi_card("Grid Consumption", f"{latest_data['Grid_Import']:.2f}", "KW", "#673AB7")
 
-    # [cite_start]3.3 LIVE ENERGY FLOW CHART & FORECASTING [cite: 20]
+    # 3.3 LIVE ENERGY FLOW CHART & FORECASTING
     st.markdown("---")
-    create_energy_flow_chart(df, optimal_schedule)
-    [cite_start]st.markdown("The dotted red line shows the ML **Demand Forecast**[cite: 20]. The orange highlight shows the RL-determined **Battery Discharge Window**.")
+    create_energy_flow_chart(df)
+    st.markdown("The dotted red line shows the ML **Demand Forecast**. The orange highlight shows the RL-determined **Battery Discharge Window**.")
 
-    # [cite_start]3.4 OPTIMIZATION OUTPUTS & IMPACT ANALYSIS [cite: 21]
+    # 3.4 OPTIMIZATION OUTPUTS & IMPACT ANALYSIS
     st.markdown("---")
 
     colA, colB = st.columns([1, 2])
@@ -190,30 +192,29 @@ def main_dashboard():
     # A. Optimal Schedule (RL Optimization Module Output)
     with colA:
         st.subheader("🤖 Optimal Battery Schedule (RL Engine)")
-        [cite_start]st.info("The Reinforcement Learning engine schedules optimal charging/discharging to boost storage efficiency and maximize savings[cite: 39].")
+        st.info("The Reinforcement Learning engine schedules optimal charging/discharging to boost storage efficiency and maximize savings.")
         
         schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
         schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
         st.table(schedule_df)
         
-        # [cite_start]Alerts & Efficiency [cite: 48]
+        # Alerts & Efficiency
         st.markdown("<br>", unsafe_allow_html=True)
-        [cite_start]st.warning("⚠️ **Alert**: Anomaly Detected - Consumption is 10% above 24-hr historical average. Check for unoptimized appliances. [cite: 48]")
+        st.warning("⚠️ **Alert**: Anomaly Detected - Consumption is 10% above 24-hr historical average. Check for unoptimized appliances.")
 
-    # [cite_start]B. Savings Calculator (Cost Analysis) [cite: 47]
+    # B. Savings Calculator (Cost Analysis)
     with colB:
         st.subheader("💰 Savings & Sustainability Impact")
         
         # Calculate impact metrics
-        # Mock savings data: Baseline Grid Import (if no solar/battery used)
         baseline_import = df['Consumption'].sum()
         optimized_import = df['Grid_Import'].sum()
         
         # Assuming a cost of 10 Rs/KWh
         estimated_savings = (baseline_import - optimized_import) * 10 
         
-        daily_savings = estimated_savings * 24 # Extrapolate to daily
-        daily_co2_savings = daily_savings * 0.8 # Mock calculation (0.8 kg CO2/Rs)
+        daily_savings = estimated_savings * 24 
+        daily_co2_savings = daily_savings * 0.8 
         monthly_savings = daily_savings * 30
         monthly_co2_savings = daily_co2_savings * 30
 
@@ -229,7 +230,7 @@ def main_dashboard():
             display_kpi_card("Monthly CO2 Saved", f"{monthly_co2_savings:.2f}", "kg", "#03A9F4")
             
         st.markdown("<br>", unsafe_allow_html=True)
-        [cite_start]st.write("Displays cost savings compared to baseline, proving the system's real ROI and sustainability impact[cite: 47]. [cite_start]Enables residents to lower electricity bills and reduce their carbon footprint[cite: 147].")
+        st.write("Displays cost savings compared to baseline, proving the system's real ROI and sustainability impact. Enables residents to lower electricity bills and reduce their carbon footprint.")
 
 if __name__ == "__main__":
     main_dashboard()
