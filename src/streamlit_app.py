@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+# *** NEW IMPORT: Use pathlib for robust file paths ***
+from pathlib import Path
 
 # --- 1. CONFIGURATION AND UTILITY FUNCTIONS ---
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
@@ -27,16 +29,23 @@ SCENARIOS = {
     }}
 
 @st.cache_data(ttl=3600)
+# NOTE: The default file_path argument is now irrelevant, as the path is calculated below.
 def load_energy_data(scenario_key, file_path='energy_data_150days_20households.csv', historical_freq='15Min'):
-    # *** FIX 1: Path is now the simple file name as it's in the same directory ***
     """
-    Loads ALL real CSV data, resamples to 15-min frequency, simulates optimization,
+    Loads ALL real CSV data using a robust, script-relative path,
+    resamples to 15-min frequency, simulates optimization,
     and generates a 24-hour forecast.
     """
     params = SCENARIOS[scenario_key]
+    
+    # *** ROBUST PATH LOGIC ***
+    # 1. Get the directory of the currently running script (src/)
+    script_dir = Path(__file__).resolve().parent
+    # 2. Construct the absolute path to the CSV file
+    csv_path = script_dir / 'energy_data_150days_20households.csv'
 
     # 1. Load and Process Real Data
-    df_raw = pd.read_csv(file_path)
+    df_raw = pd.read_csv(csv_path)
     df_raw['timestamp'] = pd.to_datetime(df_raw['timestamp'])
     df_raw = df_raw.set_index('timestamp').sort_index()
 
@@ -459,13 +468,13 @@ def main_dashboard():
     )
     # --- Data Generation (Attempting to read the CSV) ---
     try:
+        # NOTE: file_path argument is now ignored by load_energy_data, but kept for clarity
         synthetic_data, df_future, optimal_schedule = load_energy_data(
-            st.session_state.scenario,
-            file_path='energy_data_150days_20households.csv'  # *** FIX 2: Path is the simple file name here too ***
+            st.session_state.scenario
         )
     except FileNotFoundError:
-        st.error("⚠️ **File Not Found Error:** The application cannot find the data file 'energy_data_150days_20households.csv' in the working directory.")
-        st.info("Please ensure the CSV file is in the same directory as your Streamlit application script.")
+        st.error("⚠️ **File Not Found Error:** The application cannot find the data file 'energy_data_150days_20households.csv'.")
+        st.info("Please ensure the filename in the code exactly matches the file on disk (including case) and try running the app again. Pathlib was used for a more robust path resolution.")
         return
 
     # --- Page Routing ---
