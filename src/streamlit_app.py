@@ -121,7 +121,22 @@ st.markdown("""
     .stAlert > div[data-testid="stMarkdownContainer"] p {
         color: #c0c0c0 !important;
     }
-
+    
+    /* Button for Refresh */
+    div.stButton > button:first-child {
+        background-color: #03A9F4; 
+        color: white;
+        border-radius: 5px;
+        border: 1px solid #03A9F4;
+        padding: 8px 16px;
+        font-size: 16px;
+        display: inline-flex;
+        align-items: center;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #0288d1; 
+        border-color: #0288d1;
+    }
 
 </style>
 """, unsafe_allow_html=True)
@@ -201,17 +216,16 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     return synthetic_data, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
-def display_kpi_card(title, value, unit, color="#f0f0f0"): # Default to light for dark theme
+def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
-    # Special handling for Net Energy Flow to change color based on value
     value_color = color
     if title == "Net Energy Flow (Now)":
         if float(value) > 0:
-            value_color = "#00C853" # Green for positive (export/surplus)
+            value_color = "#00C853" 
         else:
-            value_color = "#FF5733" # Red for negative (import/deficit)
+            value_color = "#FF5733"
     elif title == "Battery Level (Now)":
-        value_color = "#00C853" # Always green for battery
+        value_color = "#00C853"
 
     st.markdown(
         f"""
@@ -247,11 +261,11 @@ def create_energy_flow_chart(df_full, df_future):
         )
 
     # DATA TRACES (Colors adjusted for dark theme)
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) # Brighter green
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1))) # Brighter blue
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2))) # Brighter orange
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2))) # Brighter red
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3))) # Brighter purple
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) 
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
 
     # ML FORECAST TRACE (30 min)
     fig.add_trace(go.Scatter(
@@ -263,14 +277,14 @@ def create_energy_flow_chart(df_full, df_future):
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
 
     fig.update_layout(
-        title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)', # Using title_text for proper dark theme color
+        title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
         xaxis_title="Time", yaxis_title="Power (KW)", height=550,
         margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')), # Legend text color
-        xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'), # Grid for dark theme
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
+        xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
         yaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
-        paper_bgcolor="#1e212b", # Chart background to match card
-        plot_bgcolor="#1e212b", # Plot area background to match card
+        paper_bgcolor="#1e212b",
+        plot_bgcolor="#1e212b",
     )
 
     # Scroll Panel Implementation
@@ -288,7 +302,7 @@ def create_energy_flow_chart(df_full, df_future):
                 dict(count=3, label="3D", step="day", stepmode="backward"),
                 dict(step="all")
             ]),
-            font=dict(color='#f0f0f0') # Rangeselector button text color
+            font=dict(color='#f0f0f0')
         )
     )
     fig.update_yaxes(range=[0, max_power])
@@ -303,29 +317,10 @@ def page_dashboard(synthetic_data, df_future):
     st.markdown("---")
     
     st.subheader("Real-Time Energy Monitoring")
-    # Refresh button styled like in the image
-    st.markdown(
-        """
-        <style>
-        div.stButton > button:first-child {
-            background-color: #03A9F4; /* Blue color */
-            color: white;
-            border-radius: 5px;
-            border: 1px solid #03A9F4;
-            padding: 8px 16px;
-            font-size: 16px;
-            display: inline-flex;
-            align-items: center;
-        }
-        div.stButton > button:first-child:hover {
-            background-color: #0288d1; /* Darker blue on hover */
-            border-color: #0288d1;
-        }
-        </style>
-        """, unsafe_allow_html=True
-    )
+    # Refresh button
     if st.button("Refresh 🔄", key="refresh_monitor"):
-        st.experimental_rerun()
+        # FIX: Changed st.experimental_rerun() to st.rerun()
+        st.rerun() 
 
     # About Real-Time Monitoring card
     st.markdown(
@@ -354,9 +349,9 @@ def page_dashboard(synthetic_data, df_future):
     with col2:
         display_kpi_card("Energy Demand (Now)", f"{latest_data['Consumption']:.2f}", "kW", "#FF5733")
     with col3:
-        display_kpi_card("Net Energy Flow (Now)", f"{mock_net_energy_flow:.2f}", "kW") # Color logic is in display_kpi_card
+        display_kpi_card("Net Energy Flow (Now)", f"{mock_net_energy_flow:.2f}", "kW") 
     with col4:
-        display_kpi_card("Battery Level (Now)", f"{mock_battery_level:.1f}", "%") # Color logic is in display_kpi_card
+        display_kpi_card("Battery Level (Now)", f"{mock_battery_level:.1f}", "%")
     
     st.markdown("---")
     
@@ -486,7 +481,7 @@ def page_optimization(synthetic_data, optimal_schedule):
         html_table += '<tr>'
         html_table += f'<td>{row["Time"]}</td>'
         html_table += f'<td class="{action_class}">{row["Action"]}</td>'
-        html_table += f'<td>{row["Power (KW)"]:.4f}</td>' # Format power to 4 decimal places
+        html_table += f'<td>{row["Power (KW)"]:.4f}</td>'
         html_table += f'<td>{row["Reason"]}</td>'
         html_table += '</tr>'
     html_table += '</tbody></table>'
@@ -592,6 +587,7 @@ def page_reports(synthetic_data):
         """, unsafe_allow_html=True
     )
 
+
 # --- 4. DASHBOARD ENTRY POINT ---
 def main_dashboard():
     
@@ -603,7 +599,7 @@ def main_dashboard():
     page = st.sidebar.radio(
         "Go To:",
         ("Dashboard", "Forecast", "Battery Optimization", "Reports"),
-        index=0 # Default to Dashboard
+        index=0
     )
     
     st.sidebar.markdown("---")
@@ -641,10 +637,6 @@ def main_dashboard():
         page_optimization(synthetic_data, optimal_schedule)
     elif page == "Reports":
         page_reports(synthetic_data)
-        
-    # Optional: Raw data view at the bottom of the sidebar or its own page
-    # with st.expander("📚 View Raw Data"):
-    #     st.dataframe(synthetic_data, height=300)
 
 if __name__ == "__main__":
     main_dashboard()
