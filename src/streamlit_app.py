@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
                     initial_sidebar_state="expanded")
 
-# --- Custom CSS for Dark Theme and Card Styling ---
+# --- Custom CSS for Dark Theme and Card Styling (Keeping this section unchanged for style continuity) ---
 st.markdown("""
 <style>
     /* General body and text styling for dark theme */
@@ -159,7 +159,7 @@ SCENARIOS = {
 
 @st.cache_data(ttl=3600) # Cache data for 1 hour
 def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
-    """Generates 168 hours (7 days) of synthetic data and 30-min future forecast."""
+    """Generates 168 hours (7 days) of synthetic data and 24-hour future forecast at 1-hour freq."""
 
     params = SCENARIOS[scenario_key]
 
@@ -199,16 +199,29 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
         "Daily @ 12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Daily Solar Peak Forecast"}
     }
 
-    # 2. Generate Future Forecast Data (30 minutes)
-    end_time_fixed = df.index[-1] + timedelta(minutes=15)
-    time_index_future = pd.date_range(start=end_time_fixed, end=end_time_fixed + timedelta(minutes=30), freq='1Min')
+    # 2. Generate Future Forecast Data (24 hours at 1-hour frequency)
+    # The forecast starts after the last 15-minute interval of historical data
+    forecast_start_time = df.index[-1] + timedelta(minutes=15)
+    
+    # Generate 24 hours of data at 1-hour frequency
+    time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
     df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast', 'Solar_Forecast'])
 
+    # Interpolate a smooth demand/solar profile for the next 24 hours
+    future_N = len(df_future)
+    future_consumption_cycle = 0.5 * np.sin(np.linspace(0, 2 * np.pi, future_N)) # One full day cycle
+    
+    # Base the forecast on the last historical consumption/solar, plus the expected daily cycle
     last_consumption = df['Consumption'].iloc[-1]
     last_solar = df['Solar_Gen'].iloc[-1]
-    forecast_factor_demand = (1 + np.linspace(0, 0.1, len(df_future)))
-    df_future['Demand_Forecast'] = last_consumption * forecast_factor_demand + np.random.rand(len(df_future)) * 0.1
-    df_future['Solar_Forecast'] = last_solar * (1 + np.linspace(0, 0.05, len(df_future))) + np.random.rand(len(df_future)) * 0.05
+    
+    # Use the consumption trend from the historical data for the 24H forecast
+    df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.2
+    
+    # Use the solar trend from the historical data for the 24H forecast
+    future_solar_hours = df_future.index.hour + df_future.index.minute / 60
+    future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_solar_hours - 6) / 12 * np.pi))
+    df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.05
 
     synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow', 'Net_Energy']].copy()
     synthetic_data.index.name = 'Timestamp'
@@ -216,6 +229,8 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     return synthetic_data, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
+# display_kpi_card and create_energy_flow_chart remain the same as the last working version
+
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
     value_color = color
@@ -242,8 +257,14 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
 
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart with a small scroll panel at the bottom."""
+    # NOTE: df_future is not used here for plotting, as it's hourly, 
+    # but we can adjust the end time if needed. The plot uses the historical 168H data.
+    
     fig = go.Figure()
-    end_time_full = df_future.index[-1]
+    # Use the end of the historical 15-min data for the chart's end time, 
+    # as the ML forecast is hourly and can't be easily mixed with 15-min data on the same line.
+    end_time_full = df_full.index[-1] + timedelta(minutes=15) 
+    
     max_power = df_full['Consumption'].max() * 1.1
     
     # Set Plotly template for dark theme
@@ -267,10 +288,25 @@ def create_energy_flow_chart(df_full, df_future):
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
 
-    # ML FORECAST TRACE (30 min)
+    # --- FORECAST TRACE (Plot the hourly data as steps/markers starting from the end of historical data) ---
+    # To properly show a forecast extending past the current data, we can plot the hourly points, 
+    # but we will change the legend name to reflect the hourly nature.
+    
+    # Create a small connection point from the last historical data to the first forecast point
+    last_historical_time = df_full.index[-1]
+    last_historical_consumption = df_full['Consumption'].iloc[-1]
+    
+    forecast_plot_data = df_future['Demand_Forecast'].copy()
+    
+    # Add the last historical point as the start of the forecast line
+    forecast_plot_data.loc[last_historical_time] = last_historical_consumption
+    forecast_plot_data = forecast_plot_data.sort_index()
+
     fig.add_trace(go.Scatter(
-        x=df_future.index, y=df_future['Demand_Forecast'], mode='lines', name='Demand Forecast (ML) - 30 Min',
-        line=dict(color='red', dash='dot', width=3), showlegend=True,
+        x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines', 
+        name='Demand Forecast (ML) - Hourly',
+        line=dict(color='red', dash='dot', width=3), 
+        showlegend=True,
     ))
 
     # CHART LAYOUT ADJUSTMENTS
@@ -289,7 +325,7 @@ def create_energy_flow_chart(df_full, df_future):
 
     # Scroll Panel Implementation
     fig.update_xaxes(
-        range=[initial_view_start, end_time_full],
+        range=[initial_view_start, end_time_full], # Zoom defaults to the end of the historical data
         rangeslider_visible=True,
         rangeslider_thickness=0.08,
         rangeslider=dict(
@@ -319,7 +355,6 @@ def page_dashboard(synthetic_data, df_future):
     st.subheader("Real-Time Energy Monitoring")
     # Refresh button
     if st.button("Refresh 🔄", key="refresh_monitor"):
-        # FIX: Changed st.experimental_rerun() to st.rerun()
         st.rerun() 
 
     # About Real-Time Monitoring card
@@ -377,8 +412,9 @@ def page_forecast(df_future):
 
     st.markdown("<br>")
 
-    st.subheader("Next 30 Minutes Prediction")
-    # Table styling for dark theme
+    # --- CHANGE: Display 24 Hours Prediction ---
+    st.subheader("Next 24 Hours Hourly Prediction")
+    
     st.markdown("""
         <style>
             .dataframe {
@@ -410,9 +446,10 @@ def page_forecast(df_future):
         </style>
     """, unsafe_allow_html=True)
 
-    forecast_display = df_future.head(5).reset_index()
-    forecast_display.columns = ['Time', 'Demand Forecast (kW)', 'Solar Forecast (kW)']
-    forecast_display['Time'] = forecast_display['Time'].dt.strftime('%H:%M:%S')
+    forecast_display = df_future.reset_index()
+    forecast_display.columns = ['Hour Start Time', 'Demand Forecast (kW)', 'Solar Forecast (kW)']
+    # Format time to show hour only
+    forecast_display['Hour Start Time'] = forecast_display['Hour Start Time'].dt.strftime('%H:00')
     st.dataframe(forecast_display)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
 
