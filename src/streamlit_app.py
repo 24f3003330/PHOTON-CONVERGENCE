@@ -144,11 +144,19 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
     )
 
 # --- 2. LAYOUT UTILITIES ---
+# --- 2. LAYOUT UTILITIES ---
 def create_energy_flow_chart(df_full, df_future):
-    """Creates the energy flow chart with a scroll panel."""
+    """Creates the energy flow chart with a horizontal scrollbar (by setting a large fixed width)."""
     fig = go.Figure()
     end_time_full = df_full.index[-1] + timedelta(minutes=15) 
     max_power = df_full['Consumption'].max() * 1.1
+    
+    # ----------------------------------------------------------------------
+    # *** FIX: Define a large fixed width to force a horizontal scrollbar ***
+    # This width value (e.g., 2000px) must be greater than the container width.
+    CHART_WIDTH = 2000 
+    # ----------------------------------------------------------------------
+
     fig.update_layout(template="plotly_dark")
     params = SCENARIOS[st.session_state.scenario]
     action_hour = params['Peak_Hour']
@@ -184,6 +192,12 @@ def create_energy_flow_chart(df_full, df_future):
     fig.update_layout(
         title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
         xaxis_title="Time", yaxis_title="Power (KW)", height=550,
+        
+        # *** FIX: Set fixed width in layout and disable autosize ***
+        width=CHART_WIDTH, # Apply the fixed width
+        autosize=False,
+        # -----------------------------------------------------------
+        
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
         xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
@@ -192,14 +206,14 @@ def create_energy_flow_chart(df_full, df_future):
         plot_bgcolor="#1e212b",
     )
     
-    # --- SCROLLBAR/RANGESLIDER LOGIC (The crucial change) ---
+    # --- SCROLLBAR/RANGESLIDER LOGIC (Removing the rangeslider) ---
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
         
-        # *** CHANGE 1: Disable the rangeslider (this is the scrollbar you want to remove) ***
+        # Disable the rangeslider completely
         rangeslider_visible=False, 
         
-        # *** CHANGE 2: Remove rangeslider configuration and keep rangeselector buttons (optional) ***
+        # Keep rangeselector buttons for easy time range jumps
         rangeselector=dict(
             buttons=list([
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
@@ -208,12 +222,13 @@ def create_energy_flow_chart(df_full, df_future):
             ]),
             font=dict(color='#f0f0f0')
         )
-        # Note: Removing rangeslider_thickness and rangeslider dictionary completely
     )
     # --- END SCROLLBAR/RANGESLIDER LOGIC ---
     
     fig.update_yaxes(range=[0, max_power])
-    st.plotly_chart(fig, use_container_width=True)
+    
+    # *** FIX: Disable Streamlit's default container width setting to respect fixed width ***
+    st.plotly_chart(fig, use_container_width=False)
 
 def create_forecast_chart(df_future):
     """Creates a chart showing 24-hour Demand and Solar Forecasts."""
