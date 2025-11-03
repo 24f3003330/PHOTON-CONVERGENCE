@@ -322,7 +322,9 @@ def page_forecast(df_future):
         </div>
         """, unsafe_allow_html=True
     )
-    st.markdown("<br>")
+    # --- FIX: Removed the line below which was generating the '<br>' ---
+    # st.markdown("<br>") 
+    # --------------------------------------------------------------------
 
     st.subheader("24-Hour Hourly Forecast Visual")
     create_forecast_chart(df_future)
@@ -335,7 +337,7 @@ def page_forecast(df_future):
     forecast_display['Hour Start Time'] = forecast_display['Hour Start Time'].dt.strftime('%H:00')
     st.dataframe(forecast_display)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
-
+    
 def page_optimization(synthetic_data, optimal_schedule):
     """Displays the battery optimization schedule and impact analysis."""
     st.title("🔋 Battery Optimization")
