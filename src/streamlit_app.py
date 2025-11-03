@@ -25,17 +25,15 @@ SCENARIOS = {
 
 @st.cache_data(ttl=3600) # Cache data for 1 hour
 def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
-    """Generates 168 hours (7 days) of synthetic data."""
+    """Generates 168 hours (7 days) of synthetic data and 30-min future forecast."""
 
     params = SCENARIOS[scenario_key]
 
     # 1. Generate FULL DATA (168 hours at 15-minute frequency)
-    # Use a fixed start time for consistent data, or a relative one if real-time feel is needed
-    # Let's use a fixed one for stability: Nov 1st, 2025 00:00:00
     end_time_fixed = datetime(2025, 11, 7, 0, 0, 0) # End time for 168H data
     start_time_fixed = end_time_fixed - timedelta(hours=total_hours)
 
-    time_index = pd.date_range(start=start_time_fixed, end=end_time_fixed, freq=freq, inclusive='left') # Use inclusive='left' to get exactly 168 hours of points
+    time_index = pd.date_range(start=start_time_fixed, end=end_time_fixed, freq=freq, inclusive='left')
     df = pd.DataFrame(index=time_index)
     N = len(df)
 
@@ -70,13 +68,14 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
         "Daily @ 12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Daily Solar Peak Forecast"}
     }
 
-    # 2. Generate Future Forecast Data (15 minutes at 1 minute freq)
-    # The forecast starts immediately after the end of the full historical data
-    time_index_future = pd.date_range(start=end_time_fixed, end=end_time_fixed + timedelta(minutes=15), freq='1Min')
+    # 2. Generate Future Forecast Data (30 minutes at 1 minute freq)
+    # **CHANGE HERE: Forecast duration is 30 minutes**
+    time_index_future = pd.date_range(start=end_time_fixed, end=end_time_fixed + timedelta(minutes=30), freq='1Min')
     df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast'])
 
     # Ensure the forecast starts from the last consumption point
     last_consumption = df['Consumption'].iloc[-1]
+    # Small increasing trend for the forecast
     forecast_factor = (1 + np.linspace(0, 0.1, len(df_future)))
     df_future['Demand_Forecast'] = last_consumption * forecast_factor + np.random.rand(len(df_future)) * 0.1
 
@@ -103,7 +102,7 @@ def display_kpi_card(title, value, unit, color="#268A2E"):
     )
 
 def create_energy_flow_chart(df_full, df_future):
-    """Creates the scrollable energy flow chart, zoomed to the last 24 hours."""
+    """Creates the scrollable energy flow chart, zoomed to the last 24 hours, without a rangeslider."""
     fig = go.Figure()
 
     # Get end time for full axis range
@@ -114,8 +113,6 @@ def create_energy_flow_chart(df_full, df_future):
     params = SCENARIOS[st.session_state.scenario]
     action_hour = params['Peak_Hour']
 
-    # Find the latest peak hour in the full data
-    # We look for the peak hour on the last day in the 168h data
     latest_peak = df_full[df_full.index.date == df_full.index.date.max()]
     latest_peak = latest_peak[latest_peak.index.hour == action_hour].index.max()
 
@@ -131,9 +128,6 @@ def create_energy_flow_chart(df_full, df_future):
         )
 
     # --- 2. DATA TRACES (Plotted using the FULL 168 hours of synthetic data) ---
-    # Merge df_full and df_future for the full demand trace (Historical + Forecast)
-    # Use a common index or plot separately
-
     # Battery flow traces (only historical)
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,128,0, 0.3)', line=dict(color='green', width=1)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(0,0,255, 0.3)', line=dict(color='blue', width=1)))
@@ -143,27 +137,17 @@ def create_energy_flow_chart(df_full, df_future):
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='red', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='purple', width=3)))
 
-    # --- 3. ML FORECAST TRACE (Dotted line extending into the future) ---
-    # Create a combined Demand trace: historical Consumption + future Demand_Forecast
-    demand_combined_index = df_full.index.union(df_future.index)
-    demand_combined_values = pd.concat([df_full['Consumption'], df_future['Demand_Forecast']]).reindex(demand_combined_index)
-
-    # Re-plot Consumption as a single trace to include the forecast.
-    # We must remove the previous 'Household Consumption' trace if we do this,
-    # or just use the separate forecast line as requested.
-    # Sticking to the separate forecast line for clarity:
-
-    # 4. ML FORECAST TRACE (Dotted line extending into the future)
+    # --- 3. ML FORECAST TRACE (Dotted line extending into the future for 30 min) ---
     fig.add_trace(go.Scatter(
         x=df_future.index,
         y=df_future['Demand_Forecast'],
         mode='lines',
-        name='Demand Forecast (ML)',
+        name='Demand Forecast (ML) - 30 Min',
         line=dict(color='red', dash='dot', width=3, ),
         showlegend=True,
     ))
 
-    # 5. CHART LAYOUT ADJUSTMENTS
+    # 4. CHART LAYOUT ADJUSTMENTS
     fig.update_layout(
         title='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
         xaxis_title="Time",
@@ -173,18 +157,20 @@ def create_energy_flow_chart(df_full, df_future):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    # --- KEY CHANGE: Implement 24-Hour Default View and Scrolling ---
-    # 1. Define the 24-hour window: Last 24 hours of historical data + 15 min forecast
+    # --- KEY CHANGES FOR SCROLL/PAN WITHOUT RANGESLIDER ---
+    # 1. Define the 24-hour window: Last 24 hours of historical data + 30 min forecast
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0] # -96 points for 24 hours at 15 min freq
-    
-    # 2. Add Range Slider and set initial view to 24H
+
+    # 2. Set initial zoom and DISABLE the rangeslider
     fig.update_xaxes(
         # Set the initial zoom level to the last 24 hours
         range=[initial_view_start, end_time_full],
-        # Enable the range slider for scrolling through the full 168 hours
-        rangeslider_visible=True,
-        rangeslider_thickness=0.07, # Makes the slider visible for scrolling
-        rangeselector=dict( # Add quick selection buttons (optional but helpful)
+        # **Set rangeslider_visible to False to remove the slider**
+        rangeslider_visible=False,
+        # Enable panning/scrolling via mouse interaction
+        rangeslider=None, # Ensure the rangeslider object is nullified
+        # Keep quick selection buttons for user control over time scale (optional)
+        rangeselector=dict(
             buttons=list([
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
                 dict(count=3, label="3D", step="day", stepmode="backward"),
@@ -192,8 +178,14 @@ def create_energy_flow_chart(df_full, df_future):
             ])
         )
     )
-    
-    # Ensure y-axis is not compressed by the rangeslider
+
+    # Enable general chart interactivity (like pan/zoom via mouse)
+    fig.update_layout(
+        xaxis=dict(fixedrange=False),
+        yaxis=dict(fixedrange=False)
+    )
+
+    # Ensure y-axis is not compressed
     fig.update_yaxes(range=[0, max_power])
 
     st.plotly_chart(fig, use_container_width=True)
@@ -250,7 +242,7 @@ def main_dashboard():
     st.markdown("---")
     # Pass the full 168-hour data to the chart function
     create_energy_flow_chart(synthetic_data, df_future)
-    st.markdown("The **dotted red line** shows the ML **Demand Forecast**. Use the **slider at the bottom** to scroll through the full 168 hours of historical data.")
+    st.markdown("The **dotted red line** shows the ML **Demand Forecast** for the next 30 minutes. Use your mouse to **pan/scroll** across the full 168 hours of data.")
 
     # 3.4 OPTIMIZATION OUTPUTS & IMPACT ANALYSIS
     st.markdown("---")
