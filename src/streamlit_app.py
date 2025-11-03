@@ -8,88 +8,32 @@ from datetime import datetime, timedelta
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
                     initial_sidebar_state="expanded")
 
-# --- Custom CSS for Dark Theme and Card Styling ---
+# --- Custom CSS for Dark Theme and Card Styling (Unchanged) ---
 st.markdown("""
 <style>
     /* General body and text styling for dark theme */
-    body {
-        color: #e0e0e0; 
-        background-color: #0e1117; 
-    }
-    h1, h2, h3, h4, h5, h6 {
-        color: #f0f0f0; 
-    }
-    p, li {
-        color: #c0c0c0; 
-    }
+    body { color: #e0e0e0; background-color: #0e1117; }
+    h1, h2, h3, h4, h5, h6 { color: #f0f0f0; }
+    p, li { color: #c0c0c0; }
 
     /* Streamlit widgets for dark theme */
-    .stSelectbox > div > div {
-        background-color: #262730;
-        color: #f0f0f0;
-        border-color: #4f4f4f;
-    }
-    .stSelectbox > label {
-        color: #f0f0f0;
-    }
-    .stRadio > label {
-        color: #f0f0f0;
-    }
-    .stButton > button {
-        background-color: #262730;
-        color: #f0f0f0;
-        border-color: #4f4f4f;
-    }
+    .stSelectbox > div > div { background-color: #262730; color: #f0f0f0; border-color: #4f4f4f; }
+    .stSelectbox > label { color: #f0f0f0; }
+    .stRadio > label { color: #f0f0f0; }
+    .stButton > button { background-color: #262730; color: #f0f0f0; border-color: #4f4f4f; }
 
     /* Custom Card Styling (consistent with the image look) */
-    .st-card {
-        background-color: #1e212b; /* Darker background for cards */
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 15px;
-        border: 1px solid #3a3a3a; 
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
+    .st-card { background-color: #1e212b; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #3a3a3a; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); }
     
     /* Specific styling for KPI cards */
-    .kpi-card {
-        background-color: #1e212b;
-        border-radius: 10px;
-        padding: 15px;
-        text-align: left;
-        border: 1px solid #3a3a3a;
-        height: 100%; 
-    }
-    .kpi-title {
-        font-size: 14px;
-        color: #909090; 
-        margin: 0;
-    }
-    .kpi-value {
-        font-size: 32px;
-        color: #f0f0f0; 
-        margin: 5px 0 0 0;
-        font-weight: bold;
-    }
-    .kpi-unit {
-        font-size: 16px;
-        color: #c0c0c0;
-        font-weight: normal;
-    }
+    .kpi-card { background-color: #1e212b; border-radius: 10px; padding: 15px; text-align: left; border: 1px solid #3a3a3a; height: 100%; }
+    .kpi-title { font-size: 14px; color: #909090; margin: 0; }
+    .kpi-value { font-size: 32px; color: #f0f0f0; margin: 5px 0 0 0; font-weight: bold; }
+    .kpi-unit { font-size: 16px; color: #c0c0c0; font-weight: normal; }
     
     /* For the specific report cards */
-    .report-card-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-        font-size: 16px;
-        color: #c0c0c0;
-    }
-    .report-card-value {
-        font-weight: bold;
-        color: #f0f0f0;
-    }
+    .report-card-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 16px; color: #c0c0c0; }
+    .report-card-value { font-weight: bold; color: #f0f0f0; }
     /* Specific colors for report items */
     .color-solar { color: #F9A825; } 
     .color-demand { color: #FF5733; } 
@@ -97,204 +41,124 @@ st.markdown("""
     .color-net-negative { color: #FF5733; } 
     .color-info { color: #03A9F4; } 
 
-    /* Custom info/warning boxes */
-    .st.info {
-        background-color: #1e212b; 
-        color: #03A9F4; 
-        border-left: 5px solid #03A9F4;
-        padding: 10px;
-        border-radius: 5px;
-    }
-    .st.warning {
-        background-color: #1e212b; 
-        color: #FFC107; 
-        border-left: 5px solid #FFC107;
-        padding: 10px;
-        border-radius: 5px;
-    }
-    
-    /* Adjust Streamlit info box style */
-    .stAlert {
-        background-color: #1e212b !important;
-        color: #c0c0c0 !important;
-    }
-    .stAlert > div[data-testid="stMarkdownContainer"] p {
-        color: #c0c0c0 !important;
-    }
-    
-    /* Button for Refresh */
-    div.stButton > button:first-child {
-        background-color: #03A9F4; 
-        color: white;
-        border-radius: 5px;
-        border: 1px solid #03A9F4;
-        padding: 8px 16px;
-        font-size: 16px;
-        display: inline-flex;
-        align-items: center;
-    }
-    div.stButton > button:first-child:hover {
-        background-color: #0288d1; 
-        border-color: #0288d1;
-    }
+    /* Custom info/warning boxes and table styling (including button refresh style) */
+    .st.info { background-color: #1e212b; color: #03A9F4; border-left: 5px solid #03A9F4; padding: 10px; border-radius: 5px; }
+    .st.warning { background-color: #1e212b; color: #FFC107; border-left: 5px solid #FFC107; padding: 10px; border-radius: 5px; }
     
     /* Optimization Table Styling */
-    .optimization-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        background-color: #1e212b; 
-        color: #c0c0c0; 
-        border: 1px solid #3a3a3a;
-        border-radius: 10px;
-    }
-    .optimization-table th {
-        background-color: #262730; 
-        color: #f0f0f0;
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #3a3a3a;
-    }
-    .optimization-table td {
-        padding: 10px 15px;
-        border-bottom: 1px solid #3a3a3a;
-    }
-    .optimization-table tr:last-child td {
-        border-bottom: none;
-    }
-    .optimization-table tbody tr:hover {
-        background-color: #262730; 
-    }
-    .optimization-table .action-green { color: lime; font-weight: bold; }       
-    .optimization-table .action-red { color: orangered; font-weight: bold; }    
+    .optimization-table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: #1e212b; color: #c0c0c0; border: 1px solid #3a3a3a; border-radius: 10px; }
+    .optimization-table th { background-color: #262730; color: #f0f0f0; padding: 12px 15px; text-align: left; border-bottom: 1px solid #3a3a3a; }
+    .optimization-table td { padding: 10px 15px; border-bottom: 1px solid #3a3a3a; }
+    .optimization-table tr:last-child td { border-bottom: none; }
+    .optimization-table tbody tr:hover { background-color: #262730; }
+    .optimization-table .action-green { color: #32CD32; font-weight: bold; }    
+    .optimization-table .action-red { color: #FF4500; font-weight: bold; }      
     .optimization-table .action-gray { color: gray; font-weight: bold; }
     
-    /* Dataframe styling */
-    .dataframe {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-        background-color: #1e212b; 
-        color: #c0c0c0; 
-        border: 1px solid #3a3a3a;
-        border-radius: 10px;
-    }
-    .dataframe th {
-        background-color: #262730; 
-        color: #f0f0f0;
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #3a3a3a;
-    }
-    .dataframe td {
-        padding: 10px 15px;
-        border-bottom: 1px solid #3a3a3a;
-    }
-    .dataframe tr:last-child td {
-        border-bottom: none;
-    }
-    .dataframe tbody tr:hover {
-        background-color: #262730; 
-    }
-
 </style>
 """, unsafe_allow_html=True)
 
 
-# Define SCENARIOS
+# Define SCENARIOS (Kept for parameter consistency)
 SCENARIOS = {
     "Typical Week": {
-        "Base_Consumption": 2.0,
-        "Solar_Factor": 0.5,
+        "Base_Consumption": 75.0, # Adjusted to a more realistic average kW for 20 households
+        "Solar_Factor": 50.0,    # Adjusted to a more realistic average kW for 20 households
         "Peak_Hour": 18,
-        "Peak_Discharge_Power": 2.0
+        "Peak_Discharge_Power": 15.0 # Max discharge power
     },
     "High Demand Week": {
-        "Base_Consumption": 2.5,
-        "Solar_Factor": 0.4,
+        "Base_Consumption": 90.0,
+        "Solar_Factor": 45.0,
         "Peak_Hour": 19,
-        "Peak_Discharge_Power": 3.5
+        "Peak_Discharge_Power": 25.0
     }}
 
-@st.cache_data(ttl=3600) # Cache data for 1 hour
-def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
-    """Generates 168 hours (7 days) of synthetic data and 24-hour future forecast at 1-hour freq."""
-
+@st.cache_data(ttl=3600)
+def load_energy_data(scenario_key, file_path='energy_data_150days_20households.csv', total_hours=168, historical_freq='15Min'):
+    """
+    Loads real CSV data, resamples to 15-min frequency, simulates optimization,
+    and generates a 24-hour forecast.
+    """
     params = SCENARIOS[scenario_key]
+    
+    # 1. Load and Process Real Data
+    df_raw = pd.read_csv(file_path)
+    df_raw['timestamp'] = pd.to_datetime(df_raw['timestamp'])
+    df_raw = df_raw.set_index('timestamp').sort_index()
+    
+    # Rename columns for app consistency
+    df_raw = df_raw.rename(columns={
+        'total_consumption_kw': 'Consumption',
+        'solar_generation_kw': 'Solar_Gen'
+    })
 
-    # 1. Generate FULL DATA (168 hours at 15-minute frequency)
-    end_time_fixed = datetime(2025, 11, 7, 0, 0, 0)
-    start_time_fixed = end_time_fixed - timedelta(hours=total_hours)
+    # 2. Resample Historical Data to 15-Min Frequency
+    # We use linear interpolation to generate 15-minute points from hourly data.
+    # We only resample the columns needed for optimization.
+    df_resampled = df_raw[['Consumption', 'Solar_Gen']].resample(historical_freq).mean().interpolate(method='linear')
 
-    time_index = pd.date_range(start=start_time_fixed, end=end_time_fixed, freq=freq, inclusive='left')
-    df = pd.DataFrame(index=time_index)
-    N = len(df)
+    # Select the last 7 days (168 hours or 672 points at 15-min)
+    df_historical = df_resampled.tail(total_hours * 4).copy()
+    N = len(df_historical)
 
-    # Data simulation: Daily Cycle Simulation (Historical Data)
-    consumption_daily_cycle = 0.5 * np.sin(np.linspace(0, 7 * 2 * np.pi, N))
-    df['Consumption'] = params['Base_Consumption'] + consumption_daily_cycle + np.random.rand(N) * 0.2
-
-    solar_hours = df.index.hour + df.index.minute / 60
-    solar_daily_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((solar_hours - 6) / 12 * np.pi))
-    df['Solar_Gen'] = 0.1 + solar_daily_cycle + np.random.rand(N) * 0.05
-    df['Solar_Gen'] = df['Solar_Gen'].clip(lower=0.0)
-
-    # RL Logic and Net Flow Calculations
+    # 3. Simulate Optimized Flow (Replacing the old Mock Logic with real data inputs)
+    df_historical['hour'] = df_historical.index.hour
+    
+    # RL Logic: Discharge during Peak Hour, Charge during Solar Peak Hour
     peak_h = params['Peak_Hour']
     peak_p = params['Peak_Discharge_Power']
-    is_discharge_time = (df.index.hour == peak_h) & (df.index.minute.isin([0, 15, 30, 45]))
-    df['Battery_Flow'] = np.where(
-        is_discharge_time, peak_p,
-        np.where((df.index.hour == 12) & (df.index.minute.isin([0, 15, 30, 45])), -1.5,
-            np.random.randn(N) * 0.05)
+    charge_h = 12 
+    charge_p = -params['Peak_Discharge_Power'] * 0.75 # 75% of max power, negative for charge
+
+    is_discharge_time = (df_historical['hour'] >= peak_h) & (df_historical['hour'] < peak_h + 1)
+    is_charge_time = (df_historical['hour'] >= charge_h) & (df_historical['hour'] < charge_h + 1)
+
+    df_historical['Battery_Flow'] = np.where(
+        is_discharge_time, 
+        peak_p, 
+        np.where(
+            is_charge_time & (df_historical['Solar_Gen'] > params['Solar_Factor'] * 0.2), # Only charge if there's decent solar
+            charge_p,
+            np.random.randn(N) * 0.05 # Small leakage/hold noise
+        )
     )
-    df['Net_Grid_Flow'] = df['Consumption'] - df['Solar_Gen'] - df['Battery_Flow']
-    df['Grid_Import'] = df['Net_Grid_Flow'].clip(lower=0)
-    df['Net_Energy'] = df['Solar_Gen'] + df['Battery_Flow'] - df['Consumption']
-    
-    # MOCK RL Optimization Schedule
-    optimal_schedule = {
-        f"Daily @ {peak_h:02d}:00 PM": {"Action": "DISCHARGE", "Power (KW)": peak_p, "Reason": f"Daily Predicted Grid Peak ({scenario_key})"},
-        "Daily @ 12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Daily Solar Peak Forecast"}
-    }
 
-    # 2. Generate Future Forecast Data (24 hours at 1-hour frequency - Realism Improved)
-    forecast_start_time = df.index[-1] + timedelta(minutes=15)
+    # Final energy flows
+    df_historical['Net_Grid_Flow'] = df_historical['Consumption'] - df_historical['Solar_Gen'] - df_historical['Battery_Flow']
+    df_historical['Grid_Import'] = df_historical['Net_Grid_Flow'].clip(lower=0)
+    df_historical['Net_Energy'] = df_historical['Solar_Gen'] + df_historical['Battery_Flow'] - df_historical['Consumption']
+    df_historical = df_historical.drop(columns=['hour'])
+    
+    # 4. Generate 24-Hour Hourly Forecast (df_future)
+    
+    # Get the last 24 hours of resampled data and resample to hourly for pattern extraction
+    forecast_template = df_historical[['Consumption', 'Solar_Gen']].tail(96).resample('1H').mean()
+    
+    # Create the future time index (24 hours starting after the historical data)
+    forecast_start_time = df_historical.index[-1] + timedelta(minutes=15)
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
-    df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast', 'Solar_Forecast'])
-
-    future_N = len(df_future)
     
-    # Create the cyclic pattern for the next 24 hours
-    future_hours = time_index_future.hour + time_index_future.minute / 60
+    df_future = pd.DataFrame(index=time_index_future)
     
-    # Consumption Cycle (Peaking around 6 PM/18 hours)
-    phase_shift_h = 6 
-    future_consumption_cycle = 0.5 * np.sin((future_hours - phase_shift_h) / 12 * np.pi) 
-
-    # Demand Forecast
-    df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.1
+    # Project the template forward (simplified, assumes daily pattern repeats)
+    # We use the hour of the day from the future index to pick the right pattern index
+    hour_map = forecast_template.set_index(forecast_template.index.hour)
     
-    # Solar Forecast (Peak around 12 PM/12 hours)
-    future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_hours - 6) / 12 * np.pi))
-    df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.03
+    df_future['Demand_Forecast'] = df_future.index.hour.map(hour_map['Consumption']) + np.random.rand(len(df_future)) * 0.5
+    df_future['Solar_Forecast'] = df_future.index.hour.map(hour_map['Solar_Gen']) + np.random.rand(len(df_future)) * 0.05
     df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
     
-    # Anchor the first forecast point to the last historical point for smoothness
-    last_consumption = df['Consumption'].iloc[-1]
-    last_solar = df['Solar_Gen'].iloc[-1]
+    # MOCK RL Optimization Schedule (Remains the same as it's a fixed RL policy description)
+    optimal_schedule = {
+        f"Daily @ {peak_h:02d}:00 PM": {"Action": "DISCHARGE", "Power (KW)": peak_p, "Reason": f"Daily Predicted Grid Peak ({scenario_key})"},
+        f"Daily @ {charge_h:02d}:00 PM": {"Action": "CHARGE", "Power (KW)": abs(charge_p), "Reason": "Daily Solar Peak Forecast"}
+    }
     
-    # Simple smoothing correction (using linear decay towards the forecast value)
-    df_future.loc[df_future.index[0], 'Demand_Forecast'] = last_consumption * 0.5 + df_future.loc[df_future.index[0], 'Demand_Forecast'] * 0.5
-    df_future.loc[df_future.index[0], 'Solar_Forecast'] = last_solar * 0.5 + df_future.loc[df_future.index[0], 'Solar_Forecast'] * 0.5
+    df_historical.index.name = 'Timestamp'
+    return df_historical, df_future, optimal_schedule
 
-
-    synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow', 'Net_Energy']].copy()
-    synthetic_data.index.name = 'Timestamp'
-
-    return synthetic_data, df_future, optimal_schedule
-
-# --- 2. LAYOUT UTILITIES ---
+# --- 2. LAYOUT UTILITIES (display_kpi_card, create_energy_flow_chart, create_forecast_chart remain unchanged) ---
 
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
@@ -351,8 +215,10 @@ def create_energy_flow_chart(df_full, df_future):
     last_historical_time = df_full.index[-1]
     last_historical_consumption = df_full['Consumption'].iloc[-1]
     
+    # Use only the Demand Forecast for the line chart
     forecast_plot_data = df_future['Demand_Forecast'].copy()
     
+    # Ensure continuity by inserting the last historical point
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
 
@@ -438,16 +304,16 @@ def create_forecast_chart(df_future):
 
     st.plotly_chart(fig, use_container_width=True)
 
+
 # --- 3. PAGE FUNCTIONS ---
 
 def page_dashboard(synthetic_data, df_future):
     """Displays the main chart, real-time metrics, and general info."""
     st.title("💡 Dashboard: Real-Time Monitoring & Dispatch")
-    st.write("Live tracking of your energy generation, consumption, and storage, plus optimized flow.")
+    st.write(f"Displaying data from {synthetic_data.index.min().strftime('%Y-%m-%d')} to {synthetic_data.index.max().strftime('%Y-%m-%d')} (7 Days)")
     st.markdown("---")
     
     st.subheader("Real-Time Energy Monitoring")
-    # Refresh button (FIXED: st.rerun())
     if st.button("Refresh 🔄", key="refresh_monitor"):
         st.rerun() 
 
@@ -469,7 +335,8 @@ def page_dashboard(synthetic_data, df_future):
     )
 
     latest_data = synthetic_data.iloc[-1]
-    mock_battery_level = 75 + (datetime.now().minute % 10) * 0.5
+    # Mock battery level kept for dynamic visual feedback as SOC data isn't in the simplified CSV flow
+    mock_battery_level = 75 + (datetime.now().minute % 10) * 0.5 
     mock_net_energy_flow = (latest_data['Solar_Gen'] - latest_data['Consumption'] + latest_data['Battery_Flow']).round(2)
     
     col1, col2, col3, col4 = st.columns(4)
@@ -522,8 +389,6 @@ def page_forecast(df_future):
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
 
 
-# --- 3. PAGE FUNCTIONS ---
-
 def page_optimization(synthetic_data, optimal_schedule):
     """Displays the battery optimization schedule and impact analysis."""
     st.title("🔋 Battery Optimization")
@@ -532,43 +397,7 @@ def page_optimization(synthetic_data, optimal_schedule):
 
     st.header("Reinforcement Learning Schedule")
     st.info("The Reinforcement Learning engine determines the optimal daily schedule to boost storage efficiency and maximize long-term cost savings.")
-
-    # Schedule Table (Styled for dark theme)
-    st.markdown("""
-        <style>
-            .optimization-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                background-color: #1e212b; 
-                color: #c0c0c0; 
-                border: 1px solid #3a3a3a;
-                border-radius: 10px;
-            }
-            .optimization-table th {
-                background-color: #262730; 
-                color: #f0f0f0;
-                padding: 12px 15px;
-                text-align: left;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .optimization-table td {
-                padding: 10px 15px;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .optimization-table tr:last-child td {
-                border-bottom: none;
-            }
-            .optimization-table tbody tr:hover {
-                background-color: #262730; 
-            }
-            /* EXPLICIT COLOR DEFINITIONS FOR CONTRAST */
-            .optimization-table .action-green { color: #32CD32; font-weight: bold; }    /* Lime Green for CHARGE */
-            .optimization-table .action-red { color: #FF4500; font-weight: bold; }      /* Stronger Red/Tomato for DISCHARGE */
-            .optimization-table .action-gray { color: gray; font-weight: bold; }
-        </style>
-    """, unsafe_allow_html=True)
-
+    
     # Convert schedule_df to HTML with custom classes for action colors
     schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
     schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
@@ -580,7 +409,7 @@ def page_optimization(synthetic_data, optimal_schedule):
     html_table += '</tr></thead><tbody>'
     
     for index, row in schedule_df.iterrows():
-        action_class = "action-gray" # Default to gray/hold if neither charge nor discharge
+        action_class = "action-gray"
         if "CHARGE" in row['Action'].upper():
             action_class = "action-green"
         elif "DISCHARGE" in row['Action'].upper():
@@ -597,7 +426,7 @@ def page_optimization(synthetic_data, optimal_schedule):
     st.markdown(html_table, unsafe_allow_html=True)
 
 
-    # Action Legend Card (Colors updated to match the stronger HTML colors)
+    # Action Legend Card
     st.markdown("<br>")
     st.markdown(
         """
@@ -618,7 +447,8 @@ def page_optimization(synthetic_data, optimal_schedule):
     
     baseline_import = synthetic_data['Consumption'].sum()
     optimized_import = synthetic_data['Grid_Import'].sum()
-    estimated_savings_weekly = (baseline_import - optimized_import) * 10
+    # Cost factor is arbitrary, set to 0.1 for kWh to INR conversion
+    estimated_savings_weekly = (baseline_import - optimized_import) * 0.1 
     daily_savings = estimated_savings_weekly / 7
     monthly_savings = estimated_savings_weekly * 4
     daily_co2_savings = daily_savings * 0.8
@@ -638,13 +468,14 @@ def page_optimization(synthetic_data, optimal_schedule):
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>These metrics display the cost savings compared to a non-optimized baseline, proving the system's real ROI and sustainability impact.</p>", unsafe_allow_html=True)
 
+
 def page_reports(synthetic_data):
     """Displays the daily and weekly energy reports."""
     st.title("📑 Reports")
     st.write("Summary of energy totals for Day and Week periods.")
     st.markdown("---")
     
-    # Calculation 
+    # Calculation (using 0.25 multiplier for 15-min data to convert kW to kWh)
     day_data = synthetic_data.iloc[-96:] 
     day_solar_total = (day_data['Solar_Gen'].sum() * 0.25).round(2)
     day_demand_total = (day_data['Consumption'].sum() * 0.25).round(2)
@@ -726,14 +557,18 @@ def main_dashboard():
     st.sidebar.subheader("ML & RL Overview")
     st.sidebar.markdown(
         """
-        - **Forecasting (XGBoost/LSTM):** Predicts Demand/Solar for 168 hours.
-        - **Optimization (Q-Learning/DQN):** Schedules battery action based on forecasts.
-        - **Goal:** Maximize savings by minimizing Grid Import during high-cost hours.
+        - **Data Source:** **energy_data_150days_20households.csv**
+        - **Historical Data:** Last 7 days (168H)
+        - **Optimization:** RL policy simulated using real solar/consumption data.
         """
     )
 
     # --- Data Generation (Run once per scenario change) ---
-    synthetic_data, df_future, optimal_schedule = generate_mock_data(st.session_state.scenario)
+    # File path is set to the uploaded file name
+    synthetic_data, df_future, optimal_schedule = load_energy_data(
+        st.session_state.scenario, 
+        file_path='energy_data_150days_20households.csv'
+    )
 
     # --- Page Routing ---
     if page == "Dashboard":
