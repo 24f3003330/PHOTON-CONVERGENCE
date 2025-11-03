@@ -8,19 +8,19 @@ from datetime import datetime, timedelta
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
                     initial_sidebar_state="expanded")
 
-# --- Custom CSS for Dark Theme and Card Styling (Keeping this section unchanged for style continuity) ---
+# --- Custom CSS for Dark Theme and Card Styling ---
 st.markdown("""
 <style>
     /* General body and text styling for dark theme */
     body {
-        color: #e0e0e0; /* Light gray text for readability */
-        background-color: #0e1117; /* Streamlit's default dark background */
+        color: #e0e0e0; 
+        background-color: #0e1117; 
     }
     h1, h2, h3, h4, h5, h6 {
-        color: #f0f0f0; /* Slightly lighter headings */
+        color: #f0f0f0; 
     }
     p, li {
-        color: #c0c0c0; /* Slightly darker light gray for paragraphs */
+        color: #c0c0c0; 
     }
 
     /* Streamlit widgets for dark theme */
@@ -47,7 +47,7 @@ st.markdown("""
         border-radius: 10px;
         padding: 20px;
         margin-bottom: 15px;
-        border: 1px solid #3a3a3a; /* Subtle border */
+        border: 1px solid #3a3a3a; 
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
     
@@ -58,16 +58,16 @@ st.markdown("""
         padding: 15px;
         text-align: left;
         border: 1px solid #3a3a3a;
-        height: 100%; /* Ensure uniform height */
+        height: 100%; 
     }
     .kpi-title {
         font-size: 14px;
-        color: #909090; /* Lighter gray for titles */
+        color: #909090; 
         margin: 0;
     }
     .kpi-value {
         font-size: 32px;
-        color: #f0f0f0; /* Default value color */
+        color: #f0f0f0; 
         margin: 5px 0 0 0;
         font-weight: bold;
     }
@@ -91,23 +91,23 @@ st.markdown("""
         color: #f0f0f0;
     }
     /* Specific colors for report items */
-    .color-solar { color: #F9A825; } /* Orange */
-    .color-demand { color: #FF5733; } /* Red-Orange */
-    .color-net-positive { color: #00C853; } /* Green */
-    .color-net-negative { color: #FF5733; } /* Red-Orange for deficit */
-    .color-info { color: #03A9F4; } /* Blue for info */
+    .color-solar { color: #F9A825; } 
+    .color-demand { color: #FF5733; } 
+    .color-net-positive { color: #00C853; } 
+    .color-net-negative { color: #FF5733; } 
+    .color-info { color: #03A9F4; } 
 
     /* Custom info/warning boxes */
     .st.info {
-        background-color: #1e212b; /* Match card background */
-        color: #03A9F4; /* Blue text */
+        background-color: #1e212b; 
+        color: #03A9F4; 
         border-left: 5px solid #03A9F4;
         padding: 10px;
         border-radius: 5px;
     }
     .st.warning {
-        background-color: #1e212b; /* Match card background */
-        color: #FFC107; /* Amber text */
+        background-color: #1e212b; 
+        color: #FFC107; 
         border-left: 5px solid #FFC107;
         padding: 10px;
         border-radius: 5px;
@@ -136,6 +136,65 @@ st.markdown("""
     div.stButton > button:first-child:hover {
         background-color: #0288d1; 
         border-color: #0288d1;
+    }
+    
+    /* Optimization Table Styling */
+    .optimization-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        background-color: #1e212b; 
+        color: #c0c0c0; 
+        border: 1px solid #3a3a3a;
+        border-radius: 10px;
+    }
+    .optimization-table th {
+        background-color: #262730; 
+        color: #f0f0f0;
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    .optimization-table td {
+        padding: 10px 15px;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    .optimization-table tr:last-child td {
+        border-bottom: none;
+    }
+    .optimization-table tbody tr:hover {
+        background-color: #262730; 
+    }
+    .optimization-table .action-green { color: lime; font-weight: bold; }       
+    .optimization-table .action-red { color: orangered; font-weight: bold; }    
+    .optimization-table .action-gray { color: gray; font-weight: bold; }
+    
+    /* Dataframe styling */
+    .dataframe {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        background-color: #1e212b; 
+        color: #c0c0c0; 
+        border: 1px solid #3a3a3a;
+        border-radius: 10px;
+    }
+    .dataframe th {
+        background-color: #262730; 
+        color: #f0f0f0;
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    .dataframe td {
+        padding: 10px 15px;
+        border-bottom: 1px solid #3a3a3a;
+    }
+    .dataframe tr:last-child td {
+        border-bottom: none;
+    }
+    .dataframe tbody tr:hover {
+        background-color: #262730; 
     }
 
 </style>
@@ -180,7 +239,7 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     df['Solar_Gen'] = 0.1 + solar_daily_cycle + np.random.rand(N) * 0.05
     df['Solar_Gen'] = df['Solar_Gen'].clip(lower=0.0)
 
-    # RL Logic and Net Flow Calculations (unchanged)
+    # RL Logic and Net Flow Calculations
     peak_h = params['Peak_Hour']
     peak_p = params['Peak_Discharge_Power']
     is_discharge_time = (df.index.hour == peak_h) & (df.index.minute.isin([0, 15, 30, 45]))
@@ -199,43 +258,36 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
         "Daily @ 12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Daily Solar Peak Forecast"}
     }
 
-    # 2. Generate Future Forecast Data (24 hours at 1-hour frequency)
+    # 2. Generate Future Forecast Data (24 hours at 1-hour frequency - Realism Improved)
     forecast_start_time = df.index[-1] + timedelta(minutes=15)
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
     df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast', 'Solar_Forecast'])
 
     future_N = len(df_future)
     
-    # --- REALISTIC FORECAST LOGIC CHANGE ---
-    
-    # 1. Base consumption for the next 24 hours (using the average trend)
-    base_forecast_consumption = df['Consumption'].rolling(window=96).mean().iloc[-1] 
-    
-    # 2. Create the cyclic pattern for the next 24 hours
+    # Create the cyclic pattern for the next 24 hours
     future_hours = time_index_future.hour + time_index_future.minute / 60
     
-    # Calculate the normalized sinusoidal pattern for the next day
-    future_consumption_cycle_normalized = np.sin(future_hours / 24 * 2 * np.pi) 
-    
-    # Shift the phase so the peak aligns around 6 PM (18 hours)
-    phase_shift = 6 * (2 * np.pi / 24)
-    future_consumption_cycle = 0.5 * np.sin(future_hours / 24 * 2 * np.pi - phase_shift) 
+    # Consumption Cycle (Peaking around 6 PM/18 hours)
+    phase_shift_h = 6 
+    future_consumption_cycle = 0.5 * np.sin((future_hours - phase_shift_h) / 12 * np.pi) 
 
-    # Demand Forecast: Anchor the forecast to a level close to the base, with added cyclicality and noise
-    # We use the Base_Consumption parameter for the general level
+    # Demand Forecast
     df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.1
     
-    # Solar Forecast: Anchor the solar forecast using the standard solar curve
+    # Solar Forecast (Peak around 12 PM/12 hours)
     future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_hours - 6) / 12 * np.pi))
     df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.03
     df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
     
-    # Final step for realism: Slightly adjust the first forecast point to match the last historical point
-    # This ensures the line doesn't jump suddenly between historical data and the forecast.
+    # Anchor the first forecast point to the last historical point for smoothness
     last_consumption = df['Consumption'].iloc[-1]
     last_solar = df['Solar_Gen'].iloc[-1]
-    df_future.loc[df_future.index[0], 'Demand_Forecast'] = last_consumption + (df_future.loc[df_future.index[0], 'Demand_Forecast'] - df_future.loc[df_future.index[1], 'Demand_Forecast']) # Simple linear correction
-    df_future.loc[df_future.index[0], 'Solar_Forecast'] = last_solar + (df_future.loc[df_future.index[0], 'Solar_Forecast'] - df_future.loc[df_future.index[1], 'Solar_Forecast'])
+    
+    # Simple smoothing correction (using linear decay towards the forecast value)
+    df_future.loc[df_future.index[0], 'Demand_Forecast'] = last_consumption * 0.5 + df_future.loc[df_future.index[0], 'Demand_Forecast'] * 0.5
+    df_future.loc[df_future.index[0], 'Solar_Forecast'] = last_solar * 0.5 + df_future.loc[df_future.index[0], 'Solar_Forecast'] * 0.5
+
 
     synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow', 'Net_Energy']].copy()
     synthetic_data.index.name = 'Timestamp'
@@ -277,7 +329,7 @@ def create_energy_flow_chart(df_full, df_future):
     
     fig.update_layout(template="plotly_dark")
 
-    # RL Highlight (unchanged logic)
+    # RL Highlight
     params = SCENARIOS[st.session_state.scenario]
     action_hour = params['Peak_Hour']
     latest_peak = df_full[df_full.index.date == df_full.index.date.max()]
@@ -295,13 +347,12 @@ def create_energy_flow_chart(df_full, df_future):
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
 
-    # --- FORECAST TRACE (Plot the hourly data as steps/markers starting from the end of historical data) ---
+    # --- FORECAST TRACE ---
     last_historical_time = df_full.index[-1]
     last_historical_consumption = df_full['Consumption'].iloc[-1]
     
     forecast_plot_data = df_future['Demand_Forecast'].copy()
     
-    # Ensure the forecast line starts smoothly from the last consumption point
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
 
@@ -396,7 +447,7 @@ def page_dashboard(synthetic_data, df_future):
     st.markdown("---")
     
     st.subheader("Real-Time Energy Monitoring")
-    # Refresh button
+    # Refresh button (FIXED: st.rerun())
     if st.button("Refresh 🔄", key="refresh_monitor"):
         st.rerun() 
 
@@ -455,46 +506,15 @@ def page_forecast(df_future):
 
     st.markdown("<br>")
     
-    # --- NEW: Forecast Chart ---
+    # Forecast Chart
     st.subheader("24-Hour Hourly Forecast Visual")
     create_forecast_chart(df_future)
     
     st.markdown("---")
 
-    # --- Table Display ---
+    # Table Display
     st.subheader("Next 24 Hours Hourly Prediction Table")
     
-    st.markdown("""
-        <style>
-            .dataframe {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                background-color: #1e212b; 
-                color: #c0c0c0;
-                border: 1px solid #3a3a3a;
-                border-radius: 10px;
-            }
-            .dataframe th {
-                background-color: #262730; 
-                color: #f0f0f0;
-                padding: 12px 15px;
-                text-align: left;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .dataframe td {
-                padding: 10px 15px;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .dataframe tr:last-child td {
-                border-bottom: none;
-            }
-            .dataframe tbody tr:hover {
-                background-color: #262730; 
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
     forecast_display = df_future.reset_index()
     forecast_display.columns = ['Hour Start Time', 'Demand Forecast (kW)', 'Solar Forecast (kW)']
     forecast_display['Hour Start Time'] = forecast_display['Hour Start Time'].dt.strftime('%H:00')
@@ -510,42 +530,7 @@ def page_optimization(synthetic_data, optimal_schedule):
 
     st.header("Reinforcement Learning Schedule")
     st.info("The Reinforcement Learning engine determines the optimal daily schedule to boost storage efficiency and maximize long-term cost savings.")
-
-    # Schedule Table (Styled for dark theme)
-    st.markdown("""
-        <style>
-            .optimization-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-                background-color: #1e212b; 
-                color: #c0c0c0; 
-                border: 1px solid #3a3a3a;
-                border-radius: 10px;
-            }
-            .optimization-table th {
-                background-color: #262730; 
-                color: #f0f0f0;
-                padding: 12px 15px;
-                text-align: left;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .optimization-table td {
-                padding: 10px 15px;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            .optimization-table tr:last-child td {
-                border-bottom: none;
-            }
-            .optimization-table tbody tr:hover {
-                background-color: #262730; 
-            }
-            .optimization-table .action-green { color: lime; font-weight: bold; }
-            .optimization-table .action-red { color: orangered; font-weight: bold; }
-            .optimization-table .action-gray { color: gray; font-weight: bold; }
-        </style>
-    """, unsafe_allow_html=True)
-
+    
     # Convert schedule_df to HTML with custom classes for action colors
     schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
     schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
@@ -622,13 +607,13 @@ def page_reports(synthetic_data):
     st.write("Summary of energy totals for Day and Week periods.")
     st.markdown("---")
     
-    # Calculation (Same as before, moved here)
-    day_data = synthetic_data.iloc[-96:] # Last 24 hours
+    # Calculation 
+    day_data = synthetic_data.iloc[-96:] 
     day_solar_total = (day_data['Solar_Gen'].sum() * 0.25).round(2)
     day_demand_total = (day_data['Consumption'].sum() * 0.25).round(2)
     day_net_energy = (day_data['Net_Energy'].sum() * 0.25).round(2)
 
-    week_data = synthetic_data # Last 7 Days
+    week_data = synthetic_data 
     week_solar_total = (week_data['Solar_Gen'].sum() * 0.25).round(2)
     week_demand_total = (week_data['Consumption'].sum() * 0.25).round(2)
     week_net_energy = (week_data['Net_Energy'].sum() * 0.25).round(2)
