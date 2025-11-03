@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go 
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURATION AND UTILITY FUNCTIONS ---
@@ -11,13 +11,48 @@ st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization 
 # --- Custom CSS for Dark Theme and Card Styling (UNMODIFIED) ---
 st.markdown("""
 <style>
-    /* ... (CSS styles omitted for brevity) ... */
-    /* NOTE: All CSS is retained in the complete code below */
+    /* General body and text styling for dark theme */
+    body { color: #e0e0e0; background-color: #0e1117; }
+    h1, h2, h3, h4, h5, h6 { color: #f0f0f0; }
+    p, li { color: #c0c0c0; }
+
+    /* Streamlit widgets for dark theme */
+    .stSelectbox > div > div { background-color: #262730; color: #f0f0f0; border-color: #4f4f4f; }
+    .stSelectbox > label { color: #f0f0f0; }
+    .stRadio > label { color: #f0f0f0; }
+    .stButton > button { background-color: #262730; color: #f0f0f0; border-color: #4f4f4f; }
+
+    /* Custom Card Styling */
+    .st-card { background-color: #1e212b; border-radius: 10px; padding: 20px; margin-bottom: 15px; border: 1px solid #3a3a3a; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); }
+    .kpi-card { background-color: #1e212b; border-radius: 10px; padding: 15px; text-align: left; border: 1px solid #3a3a3a; height: 100%; }
+    .kpi-title { font-size: 14px; color: #909090; margin: 0; }
+    .kpi-value { font-size: 32px; color: #f0f0f0; margin: 5px 0 0 0; font-weight: bold; }
+    .kpi-unit { font-size: 16px; color: #c0c0c0; font-weight: normal; }
+    
+    /* Report card colors */
+    .report-card-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 16px; color: #c0c0c0; }
+    .report-card-value { font-weight: bold; color: #f0f0f0; }
+    .color-solar { color: #F9A825; } 
+    .color-demand { color: #FF5733; } 
+    .color-net-positive { color: #00C853; } 
+    .color-net-negative { color: #FF5733; } 
+    
+    /* Optimization Table Styling */
+    .optimization-table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: #1e212b; color: #c0c0c0; border: 1px solid #3a3a3a; border-radius: 10px; }
+    .optimization-table th { background-color: #262730; color: #f0f0f0; padding: 12px 15px; text-align: left; border-bottom: 1px solid #3a3a3a; }
+    .optimization-table td { padding: 10px 15px; border-bottom: 1px solid #3a3a3a; }
+    .optimization-table .action-green { color: #32CD32; font-weight: bold; }    
+    .optimization-table .action-red { color: #FF4500; font-weight: bold; }      
+    .optimization-table .action-gray { color: gray; font-weight: bold; }
+
+    /* Button for Refresh */
+    div.stButton > button:first-child { background-color: #03A9F4; color: white; border-radius: 5px; border: 1px solid #03A9F4; padding: 8px 16px; font-size: 16px; display: inline-flex; align-items: center; }
+
 </style>
 """, unsafe_allow_html=True)
 
 
-# Define SCENARIOS
+# Define SCENARIOS (Used for RL parameters/context)
 SCENARIOS = {
     "Typical Week": {
         "Base_Consumption": 75.0, 
@@ -33,19 +68,15 @@ SCENARIOS = {
     }}
 
 @st.cache_data(ttl=3600)
-def load_energy_data(scenario_key, file_path='energy_data_150days_20households.csv', total_hours=168, historical_freq='15Min'):
+def load_energy_data(scenario_key, file_path='energy_data_150days_20households.csv', historical_freq='15Min'):
     """
-    Loads real CSV data, resamples to 15-min frequency, simulates optimization,
+    Loads ALL real CSV data, resamples to 15-min frequency, simulates optimization,
     and generates a 24-hour forecast.
     """
     params = SCENARIOS[scenario_key]
     
-    # --- FIX VERIFIED: This line is causing the FileNotFoundError ---
-    # The fix is external (ensure file is present), but the code structure is correct.
-    df_raw = pd.read_csv(file_path)
-    # -----------------------------------------------------------------
-
     # 1. Load and Process Real Data
+    df_raw = pd.read_csv(file_path)
     df_raw['timestamp'] = pd.to_datetime(df_raw['timestamp'])
     df_raw = df_raw.set_index('timestamp').sort_index()
     
@@ -58,11 +89,12 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     # 2. Resample Historical Data to 15-Min Frequency
     df_resampled = df_raw[['Consumption', 'Solar_Gen']].resample(historical_freq).mean().interpolate(method='linear')
 
-    # Select the last 7 days (168 hours or 672 points at 15-min)
-    df_historical = df_resampled.tail(total_hours * 4).copy()
+    # --- KEY CHANGE: Select ALL resampled data ---
+    df_historical = df_resampled.copy()
+    
     N = len(df_historical)
 
-    # 3. Simulate Optimized Flow (RL Logic)
+    # 3. Simulate Optimized Flow (RL Logic applied to ALL data)
     df_historical['hour'] = df_historical.index.hour
     
     peak_h = params['Peak_Hour']
@@ -90,6 +122,7 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     df_historical = df_historical.drop(columns=['hour'])
     
     # 4. Generate 24-Hour Hourly Forecast (df_future)
+    # Forecast is based on the last 24 hours of data loaded.
     forecast_template = df_historical[['Consumption', 'Solar_Gen']].tail(96).resample('1H').mean()
     forecast_start_time = df_historical.index[-1] + timedelta(minutes=15)
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
@@ -101,6 +134,11 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     df_future['Solar_Forecast'] = df_future.index.hour.map(hour_map['Solar_Gen']) + np.random.rand(len(df_future)) * 0.05
     df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
     
+    # Anchor the first forecast point for smoothness
+    last_consumption = df_historical['Consumption'].iloc[-1]
+    df_future.loc[df_future.index[0], 'Demand_Forecast'] = last_consumption * 0.5 + df_future.loc[df_future.index[0], 'Demand_Forecast'] * 0.5
+
+    # MOCK RL Optimization Schedule 
     optimal_schedule = {
         f"Daily @ {peak_h:02d}:00 PM": {"Action": "DISCHARGE", "Power (KW)": peak_p, "Reason": f"Daily Predicted Grid Peak ({scenario_key})"},
         f"Daily @ {charge_h:02d}:00 PM": {"Action": "CHARGE", "Power (KW)": abs(charge_p), "Reason": "Daily Solar Peak Forecast"}
@@ -109,8 +147,7 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     df_historical.index.name = 'Timestamp'
     return df_historical, df_future, optimal_schedule
 
-# --- 2. LAYOUT UTILITIES (All functions remain as they were) ---
-# ... (display_kpi_card, create_energy_flow_chart, create_forecast_chart, etc. are retained) ...
+# --- 2. LAYOUT UTILITIES (Functions for Chart and KPI display) ---
 
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
@@ -137,12 +174,10 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
     )
 
 def create_energy_flow_chart(df_full, df_future):
-    """Creates the energy flow chart with a small scroll panel at the bottom."""
+    """Creates the energy flow chart with a scroll panel."""
     fig = go.Figure()
     end_time_full = df_full.index[-1] + timedelta(minutes=15) 
-    
     max_power = df_full['Consumption'].max() * 1.1
-    
     fig.update_layout(template="plotly_dark")
 
     params = SCENARIOS[st.session_state.scenario]
@@ -155,17 +190,18 @@ def create_energy_flow_chart(df_full, df_future):
             y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
         )
 
+    # DATA TRACES 
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) 
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
 
+    # --- FORECAST TRACE ---
     last_historical_time = df_full.index[-1]
     last_historical_consumption = df_full['Consumption'].iloc[-1]
     
     forecast_plot_data = df_future['Demand_Forecast'].copy()
-    
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
 
@@ -176,6 +212,8 @@ def create_energy_flow_chart(df_full, df_future):
         showlegend=True,
     ))
 
+    # CHART LAYOUT ADJUSTMENTS
+    # Sets initial view to the last 24 hours of the *entire* dataset
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
 
     fig.update_layout(
@@ -189,6 +227,7 @@ def create_energy_flow_chart(df_full, df_future):
         plot_bgcolor="#1e212b",
     )
 
+    # Scroll Panel Implementation
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
         rangeslider_visible=True,
@@ -251,8 +290,9 @@ def create_forecast_chart(df_future):
 
 def page_dashboard(synthetic_data, df_future):
     """Displays the main chart, real-time metrics, and general info."""
+    # Display the full time range of the loaded data
     st.title("💡 Dashboard: Real-Time Monitoring & Dispatch")
-    st.write(f"Displaying data from **{synthetic_data.index.min().strftime('%Y-%m-%d %H:%M')}** to **{synthetic_data.index.max().strftime('%Y-%m-%d %H:%M')}** (Last 7 Days)")
+    st.write(f"Displaying **{len(synthetic_data) / 96:.0f} days** of historical data from **{synthetic_data.index.min().strftime('%Y-%m-%d %H:%M')}** to **{synthetic_data.index.max().strftime('%Y-%m-%d %H:%M')}**.")
     st.markdown("---")
     
     st.subheader("Real-Time Energy Monitoring")
@@ -292,7 +332,7 @@ def page_dashboard(synthetic_data, df_future):
     st.markdown("---")
     
     create_energy_flow_chart(synthetic_data, df_future)
-    st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>Use the <b>small scroll panel at the bottom</b> to easily slide and view the next 24 hours of data across the full 168-hour timeline.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>Use the <b>small scroll panel at the bottom</b> to easily slide and view the full historical data timeline.</p>", unsafe_allow_html=True)
 
 
 def page_forecast(df_future):
@@ -408,12 +448,15 @@ def page_reports(synthetic_data):
     st.write("Summary of energy totals for Day and Week periods.")
     st.markdown("---")
     
-    day_data = synthetic_data.iloc[-96:] 
+    # Calculation (using 0.25 multiplier for 15-min data to convert kW to kWh)
+    # Day Report: Last 24 hours (96 points)
+    day_data = synthetic_data.tail(96) 
     day_solar_total = (day_data['Solar_Gen'].sum() * 0.25).round(2)
     day_demand_total = (day_data['Consumption'].sum() * 0.25).round(2)
     day_net_energy = (day_data['Net_Energy'].sum() * 0.25).round(2)
 
-    week_data = synthetic_data 
+    # Week Report: Last 7 days (672 points)
+    week_data = synthetic_data.tail(672) 
     week_solar_total = (week_data['Solar_Gen'].sum() * 0.25).round(2)
     week_demand_total = (week_data['Consumption'].sum() * 0.25).round(2)
     week_net_energy = (week_data['Net_Energy'].sum() * 0.25).round(2)
@@ -485,7 +528,7 @@ def main_dashboard():
     st.sidebar.markdown(
         """
         - **Data Source:** **energy_data_150days_20households.csv**
-        - **Historical Data:** Last 7 days (168H)
+        - **Historical Data:** All 150 days loaded
         - **Optimization:** RL policy simulated using real solar/consumption data.
         """
     )
@@ -499,7 +542,6 @@ def main_dashboard():
     except FileNotFoundError:
         st.error("⚠️ **File Not Found Error:** The application cannot find the data file 'energy_data_150days_20households.csv' in the working directory.")
         st.info("Please ensure the CSV file is in the same directory as your Streamlit application script.")
-        # Stop execution to prevent further errors
         return 
 
     # --- Page Routing ---
@@ -508,7 +550,7 @@ def main_dashboard():
     elif page == "Forecast":
         page_forecast(df_future)
     elif page == "Battery Optimization":
-        page_optimization(synthetic_data, optimal_schedule)
+        page_optimization(synthetic_data, df_future, optimal_schedule)
     elif page == "Reports":
         page_reports(synthetic_data)
 
