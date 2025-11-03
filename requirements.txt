@@ -1,3 +1,5 @@
-altair
-pandas
+# REQUIRED LIBRARIES FOR PHOTON DASHBOARD
 streamlit
+pandas
+numpy
+plotly
