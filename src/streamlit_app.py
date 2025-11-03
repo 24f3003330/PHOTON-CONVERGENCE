@@ -27,7 +27,8 @@ SCENARIOS = {
     }}
 
 @st.cache_data(ttl=3600)
-def load_energy_data(scenario_key, file_path='../energy_data_150days_20households.csv', historical_freq='15Min'):
+def load_energy_data(scenario_key, file_path='energy_data_150days_20households.csv', historical_freq='15Min'):
+    # *** FIX 1: Path is now the simple file name as it's in the same directory ***
     """
     Loads ALL real CSV data, resamples to 15-min frequency, simulates optimization,
     and generates a 24-hour forecast.
@@ -460,20 +461,20 @@ def main_dashboard():
     try:
         synthetic_data, df_future, optimal_schedule = load_energy_data(
             st.session_state.scenario,
-            file_path='../energy_data_150days_20households.csv'  # <--- FIX APPLIED HERE
+            file_path='energy_data_150days_20households.csv'  # *** FIX 2: Path is the simple file name here too ***
         )
     except FileNotFoundError:
         st.error("⚠️ **File Not Found Error:** The application cannot find the data file 'energy_data_150days_20households.csv' in the working directory.")
         st.info("Please ensure the CSV file is in the same directory as your Streamlit application script.")
         return
 
-    # --- Page Routing (FIX APPLIED HERE) ---
+    # --- Page Routing ---
     if page == "Dashboard":
         page_dashboard(synthetic_data, df_future)
     elif page == "Forecast":
         page_forecast(df_future)
     elif page == "Battery Optimization":
-        # FIXED: Removed the extra df_future argument
+        # Fixed: Removed the extra df_future argument
         page_optimization(synthetic_data, optimal_schedule)
     elif page == "Reports":
         page_reports(synthetic_data)
