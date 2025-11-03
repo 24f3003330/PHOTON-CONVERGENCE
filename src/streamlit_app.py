@@ -143,10 +143,11 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
         unsafe_allow_html=True
     )
 
+# --- 2. LAYOUT UTILITIES ---
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart with a scroll panel."""
     fig = go.Figure()
-    end_time_full = df_full.index[-1] + timedelta(minutes=15)
+    end_time_full = df_full.index[-1] + timedelta(minutes=15) 
     max_power = df_full['Consumption'].max() * 1.1
     fig.update_layout(template="plotly_dark")
     params = SCENARIOS[st.session_state.scenario]
@@ -158,8 +159,8 @@ def create_energy_flow_chart(df_full, df_future):
             type="rect", x0=latest_peak.replace(minute=0), x1=latest_peak.replace(minute=0) + timedelta(hours=1),
             y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
         )
-    # DATA TRACES
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1)))
+    # DATA TRACES 
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) 
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
@@ -167,14 +168,14 @@ def create_energy_flow_chart(df_full, df_future):
     # --- FORECAST TRACE ---
     last_historical_time = df_full.index[-1]
     last_historical_consumption = df_full['Consumption'].iloc[-1]
-
+        
     forecast_plot_data = df_future['Demand_Forecast'].copy()
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
     fig.add_trace(go.Scatter(
-        x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines',
+        x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines', 
         name='Demand Forecast (ML) - Hourly',
-        line=dict(color='red', dash='dot', width=3),
+        line=dict(color='red', dash='dot', width=3), 
         showlegend=True,
     ))
     # CHART LAYOUT ADJUSTMENTS
@@ -190,15 +191,15 @@ def create_energy_flow_chart(df_full, df_future):
         paper_bgcolor="#1e212b",
         plot_bgcolor="#1e212b",
     )
-    # Scroll Panel Implementation
+    
+    # --- SCROLLBAR/RANGESLIDER LOGIC (The crucial change) ---
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
-        rangeslider_visible=True,
-        rangeslider_thickness=0.08,
-        rangeslider=dict(
-            bgcolor="#444444", bordercolor="gray",
-            yaxis=dict(rangemode="fixed", range=[0, max_power])
-        ),
+        
+        # *** CHANGE 1: Disable the rangeslider (this is the scrollbar you want to remove) ***
+        rangeslider_visible=False, 
+        
+        # *** CHANGE 2: Remove rangeslider configuration and keep rangeselector buttons (optional) ***
         rangeselector=dict(
             buttons=list([
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
@@ -207,7 +208,10 @@ def create_energy_flow_chart(df_full, df_future):
             ]),
             font=dict(color='#f0f0f0')
         )
+        # Note: Removing rangeslider_thickness and rangeslider dictionary completely
     )
+    # --- END SCROLLBAR/RANGESLIDER LOGIC ---
+    
     fig.update_yaxes(range=[0, max_power])
     st.plotly_chart(fig, use_container_width=True)
 
