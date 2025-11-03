@@ -522,6 +522,8 @@ def page_forecast(df_future):
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
 
 
+# --- 3. PAGE FUNCTIONS ---
+
 def page_optimization(synthetic_data, optimal_schedule):
     """Displays the battery optimization schedule and impact analysis."""
     st.title("🔋 Battery Optimization")
@@ -530,7 +532,43 @@ def page_optimization(synthetic_data, optimal_schedule):
 
     st.header("Reinforcement Learning Schedule")
     st.info("The Reinforcement Learning engine determines the optimal daily schedule to boost storage efficiency and maximize long-term cost savings.")
-    
+
+    # Schedule Table (Styled for dark theme)
+    st.markdown("""
+        <style>
+            .optimization-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                background-color: #1e212b; 
+                color: #c0c0c0; 
+                border: 1px solid #3a3a3a;
+                border-radius: 10px;
+            }
+            .optimization-table th {
+                background-color: #262730; 
+                color: #f0f0f0;
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .optimization-table td {
+                padding: 10px 15px;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .optimization-table tr:last-child td {
+                border-bottom: none;
+            }
+            .optimization-table tbody tr:hover {
+                background-color: #262730; 
+            }
+            /* EXPLICIT COLOR DEFINITIONS FOR CONTRAST */
+            .optimization-table .action-green { color: #32CD32; font-weight: bold; }    /* Lime Green for CHARGE */
+            .optimization-table .action-red { color: #FF4500; font-weight: bold; }      /* Stronger Red/Tomato for DISCHARGE */
+            .optimization-table .action-gray { color: gray; font-weight: bold; }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Convert schedule_df to HTML with custom classes for action colors
     schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
     schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
@@ -542,7 +580,7 @@ def page_optimization(synthetic_data, optimal_schedule):
     html_table += '</tr></thead><tbody>'
     
     for index, row in schedule_df.iterrows():
-        action_class = ""
+        action_class = "action-gray" # Default to gray/hold if neither charge nor discharge
         if "CHARGE" in row['Action'].upper():
             action_class = "action-green"
         elif "DISCHARGE" in row['Action'].upper():
@@ -559,15 +597,15 @@ def page_optimization(synthetic_data, optimal_schedule):
     st.markdown(html_table, unsafe_allow_html=True)
 
 
-    # Action Legend Card
+    # Action Legend Card (Colors updated to match the stronger HTML colors)
     st.markdown("<br>")
     st.markdown(
         """
         <div class="st-card">
         <h4 style="margin-top: 0; color: #f0f0f0;">Action legend</h4>
         <ul style="color: #c0c0c0;">
-            <li><span style="color: lime; font-weight: bold;">Green</span>: charge when solar is surplus</li>
-            <li><span style="color: orangered; font-weight: bold;">Red</span>: discharge during expensive peak hours</li>
+            <li><span style="color: #32CD32; font-weight: bold;">Green</span>: charge when solar is surplus</li>
+            <li><span style="color: #FF4500; font-weight: bold;">Red</span>: discharge during expensive peak hours</li>
             <li><span style="color: gray; font-weight: bold;">Gray</span>: hold when conditions are neutral</li>
         </ul>
         </div>
@@ -599,7 +637,6 @@ def page_optimization(synthetic_data, optimal_schedule):
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>These metrics display the cost savings compared to a non-optimized baseline, proving the system's real ROI and sustainability impact.</p>", unsafe_allow_html=True)
-
 
 def page_reports(synthetic_data):
     """Displays the daily and weekly energy reports."""
