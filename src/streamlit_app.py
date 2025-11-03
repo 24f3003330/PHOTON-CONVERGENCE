@@ -5,72 +5,89 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURATION AND UTILITY FUNCTIONS ---
-st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard", 
+st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard (168H)", 
                    initial_sidebar_state="expanded")
 
 # Define SCENARIOS that influence data and RL output
 SCENARIOS = {
-    "Standard Day": {
+    "Typical Week": {
         "Base_Consumption": 2.0, 
-        "Solar_Factor": 0.4, 
-        "RL_Discharge_Hour": 18, # 6 PM discharge
-        "RL_Discharge_Power": 1.0 
+        "Solar_Factor": 0.5, 
+        "Peak_Hour": 18, # 6 PM is the default grid peak hour
+        "Peak_Discharge_Power": 2.0 
     },
-    "High Peak Day": {
+    "High Demand Week": {
         "Base_Consumption": 2.5,  # Higher base load
-        "Solar_Factor": 0.3, # Less sun
-        "RL_Discharge_Hour": 19, # 7 PM discharge to counter higher peak
-        "RL_Discharge_Power": 3.0 # Higher discharge power
+        "Solar_Factor": 0.4, # Slightly cloudier week
+        "Peak_Hour": 19, # 7 PM is the default grid peak hour
+        "Peak_Discharge_Power": 3.5 # Higher discharge needed
     }
 }
 
-@st.cache_data(ttl=5) # Cache data for 5 seconds for re-run on scenario change
-def generate_mock_data(scenario_key):
-    """Generates mock time-series data based on the selected scenario."""
+@st.cache_data(ttl=3600) # Cache data for 1 hour
+def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
+    """Generates 168 hours (7 days) of historical data for ML training."""
     
-    # Use selected scenario parameters
     params = SCENARIOS[scenario_key]
     
+    # 1. Generate Historical/Current Data (168 hours at 15-minute frequency)
     end_time = datetime.now()
-    start_time = end_time - timedelta(minutes=60)
-    time_index = pd.date_range(start=start_time, end=end_time, freq='1Min')
+    start_time = end_time - timedelta(hours=total_hours)
+    time_index = pd.date_range(start=start_time, end=end_time, freq=freq)
     df = pd.DataFrame(index=time_index)
     
-    # Household Consumption (Demand Forecasting Input)
-    fluctuation = 0.5 * np.sin(np.linspace(0, 4*np.pi, len(df)))
-    df['Consumption'] = params['Base_Consumption'] + fluctuation + np.random.rand(len(df)) * 0.2
+    # Calculate array length for sine wave simulation
+    N = len(df)
     
-    # Solar Generation (Solar Forecasting Input)
-    solar_curve = params['Solar_Factor'] * np.sin(np.linspace(0, np.pi, len(df))) * (df.index.hour % 24).isin(range(10, 17))
-    df['Solar_Gen'] = 0.2 + solar_curve + np.random.rand(len(df)) * 0.1
+    # Data simulation: Daily Cycle Simulation (using 24-hour period for sine wave)
+    # Consumption peaks in the evening (18:00 to 22:00)
+    consumption_daily_cycle = 0.5 * np.sin(np.linspace(0, 7 * 2 * np.pi, N))
+    df['Consumption'] = params['Base_Consumption'] + consumption_daily_cycle + np.random.rand(N) * 0.2
+    
+    # Solar Generation: Peaks sharply around noon
+    solar_hours = df.index.hour + df.index.minute / 60
+    solar_daily_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((solar_hours - 6) / 12 * np.pi))
+    df['Solar_Gen'] = 0.1 + solar_daily_cycle + np.random.rand(N) * 0.05
     df['Solar_Gen'] = df['Solar_Gen'].clip(lower=0.0)
 
-    # Battery and Grid Simulation (MOCK RL Strategy Implementation)
-    discharge_h = params['RL_Discharge_Hour']
-    discharge_p = params['RL_Discharge_Power']
+    # RL Logic: Discharge at the designated Peak_Hour (e.g., 6 PM) EVERY day
+    peak_h = params['Peak_Hour']
+    peak_p = params['Peak_Discharge_Power']
     
-    # Simulate RL action: Discharge the battery during the peak hour
+    # Discharge battery for 1 hour starting at the peak hour
+    is_discharge_time = (df.index.hour == peak_h) & (df.index.minute.isin([0, 15, 30, 45]))
     df['Battery_Flow'] = np.where(
-        (df.index.hour == discharge_h) & (df.index.minute < 30), discharge_p, # Discharge (Positive = Export from Battery)
+        is_discharge_time, 
+        peak_p, 
         np.where(
-            (df.index.hour == 12) & (df.index.minute < 30), -1.5, # Charge (Negative = Import to Battery)
-            np.random.randn(len(df)) * 0.05
+            (df.index.hour == 12) & (df.index.minute.isin([0, 15, 30, 45])), -1.5, # Charge at noon
+            np.random.randn(N) * 0.05
         )
     )
     
     # Grid Consumption (The optimized outcome)
-    # The actual power pulled from the grid after accounting for solar and battery
-    df['Grid_Import'] = df['Consumption'] - df['Solar_Gen'] - df['Battery_Flow']
-    df['Grid_Import'] = df['Grid_Import'].clip(lower=0)
+    df['Grid_Import'] = (df['Consumption'] - df['Solar_Gen'] - df['Battery_Flow']).clip(lower=0)
     
-    # MOCK RL Optimization Schedule (Updated based on scenario)
+    # MOCK RL Optimization Schedule (Simplified for the whole week)
     optimal_schedule = {
-        f"{discharge_h:02d}:00 PM": {"Action": "DISCHARGE", "Power (KW)": discharge_p, "Reason": f"Predicted Grid Peak ({scenario_key})"},
-        "12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Solar Peak Forecast"},
-        "09:00 PM": {"Action": "IDLE", "Power (KW)": 0.0, "Reason": "Low Demand Period"}
+        f"Daily @ {peak_h:02d}:00 PM": {"Action": "DISCHARGE", "Power (KW)": peak_p, "Reason": f"Daily Predicted Grid Peak ({scenario_key})"},
+        "Daily @ 12:00 PM": {"Action": "CHARGE", "Power (KW)": 4.5, "Reason": "Daily Solar Peak Forecast"}
     }
     
-    return df, optimal_schedule
+    # Select the columns that would represent the training/synthetic data
+    synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow']].copy()
+    synthetic_data.index.name = 'Timestamp'
+    
+    # Extract only the last 24 hours for the main chart visualization
+    df_chart = df.iloc[-96:] 
+    
+    # Generate Future Forecast Data (Last 15 minutes of the week + 15 minutes forward)
+    end_time_current = df_chart.index[-1]
+    time_index_future = pd.date_range(start=end_time_current, end=end_time_current + timedelta(minutes=15), freq='1Min')
+    df_future = pd.DataFrame(index=time_index_future)
+    df_future['Demand_Forecast'] = df_chart['Consumption'].iloc[-1] * (1 + np.linspace(0, 0.1, len(df_future))) + np.random.rand(len(df_future)) * 0.1
+    
+    return synthetic_data, df_chart, df_future, optimal_schedule
 
 # --- 2. LAYOUT FUNCTIONS ---
 
@@ -89,44 +106,57 @@ def display_kpi_card(title, value, unit, color="#268A2E"):
         unsafe_allow_html=True
     )
 
-def create_energy_flow_chart(df):
-    """Creates the Live Energy Flow chart and highlights the RL action."""
+def create_energy_flow_chart(df_chart, df_future):
+    """Creates the Live Energy Flow chart using Plotly, zoomed to the last 24 hours."""
     fig = go.Figure()
     
-    # Retrieve the discharge hour from the currently active scenario for highlighting
-    discharge_hour = SCENARIOS[st.session_state.scenario]['RL_Discharge_Hour']
-    
-    # Add a subtle shape to highlight the optimization action time window (RL Action)
-    # This visually connects the RL schedule to the real-time outcome
-    fig.add_shape(
-        type="rect",
-        x0=datetime.now() - timedelta(minutes=60) + timedelta(hours=discharge_hour),
-        x1=datetime.now() - timedelta(minutes=60) + timedelta(hours=discharge_hour, minutes=30),
-        y0=0, y1=df['Consumption'].max() * 1.1,
-        line=dict(width=0),
-        fillcolor="rgba(255, 165, 0, 0.1)",
-        layer="below"
-    )
-    
-    # Add traces for the different energy flows
-    fig.add_trace(go.Scatter(x=df.index, y=df['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='red', width=2)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='orange', width=2)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='purple', width=3)))
-    
-    # Battery Flow: Discharge (Positive) and Charge (Negative) fill for visual clarity
-    fig.add_trace(go.Scatter(x=df.index, y=df['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,128,0, 0.3)', line=dict(color='green', width=1)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(0,0,255, 0.3)', line=dict(color='blue', width=1)))
+    # Define Time Axis Range (Last 24 hours of data + 15 min forecast)
+    start_time = df_chart.index[0]
+    end_time = df_future.index[-1]
 
-    # MOCK FORECAST (Dotted line for predictive insights - XGBoost/LSTM output)
-    forecast_points = int(len(df) * 0.1)
-    mock_forecast = df['Consumption'].iloc[-forecast_points:].values * 1.05 
-    fig.add_trace(go.Scatter(x=df.index[-forecast_points:], y=mock_forecast, mode='lines', name='Demand Forecast (ML)', line=dict(color='red', dash='dot')))
+    # --- 1. RL ACTION HIGHLIGHT ---
+    # Highlight the next RL Discharge period (e.g., 6 PM of the last day)
+    params = SCENARIOS[st.session_state.scenario]
+    action_hour = params['Peak_Hour']
+    
+    # Find the latest peak hour on the chart
+    latest_peak = df_chart[df_chart.index.hour == action_hour].index.max()
+    if latest_peak:
+        fig.add_shape(
+            type="rect",
+            x0=latest_peak.replace(minute=0),
+            x1=latest_peak.replace(minute=0) + timedelta(hours=1),
+            y0=0, y1=df_chart['Consumption'].max() * 1.1,
+            line=dict(width=0),
+            fillcolor="rgba(255, 165, 0, 0.2)",
+            layer="below"
+        )
+    
+    # --- 2. CURRENT DATA TRACES ---
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='red', width=2)))
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='orange', width=2)))
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='purple', width=3)))
+    
+    # 3. BATTERY FLOW AREA
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,128,0, 0.3)', line=dict(color='green', width=1)))
+    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(0,0,255, 0.3)', line=dict(color='blue', width=1)))
 
+    # 4. ML FORECAST TRACE (Dotted line extending into the future)
+    fig.add_trace(go.Scatter(
+        x=df_future.index, 
+        y=df_future['Demand_Forecast'], 
+        mode='lines', 
+        name='Demand Forecast (ML)', 
+        line=dict(color='red', dash='dot', width=3)
+    ))
+
+    # 5. CHART LAYOUT ADJUSTMENTS
     fig.update_layout(
-        title='Live Energy Flow & **ML-Optimized Dispatch** (Last Hour)',
+        title='Energy Flow & **ML-Optimized Dispatch** (Last 24 Hours + Forecast)',
         xaxis_title="Time",
         yaxis_title="Power (KW)",
         height=500,
+        xaxis_range=[start_time, end_time],
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -141,9 +171,8 @@ def main_dashboard():
     # 3.1 SIDEBAR FOR INTERACTIVITY (Scenario Selection)
     st.sidebar.title("🛠️ Prototype Controls")
     
-    # Initialize session state for scenario
     if 'scenario' not in st.session_state:
-        st.session_state['scenario'] = "Standard Day"
+        st.session_state['scenario'] = "Typical Week"
         
     st.session_state.scenario = st.sidebar.selectbox(
         "Select Energy Scenario:",
@@ -154,19 +183,19 @@ def main_dashboard():
     st.sidebar.subheader("ML & RL Overview")
     st.sidebar.markdown(
         """
-        - **Forecasting (XGBoost/LSTM):** Predicts Demand/Solar.
+        - **Forecasting (XGBoost/LSTM):** Predicts Demand/Solar for 168 hours.
         - **Optimization (Q-Learning/DQN):** Schedules battery action based on forecasts.
         - **Goal:** Maximize savings by minimizing Grid Import during high-cost hours.
         """
     )
     
-    df, optimal_schedule = generate_mock_data(st.session_state.scenario)
+    synthetic_data, df_chart, df_future, optimal_schedule = generate_mock_data(st.session_state.scenario)
     st.markdown("---")
     
-    # 3.2 REAL-TIME METRICS
-    st.subheader("📊 Real-time Power Flow")
+    # 3.2 REAL-TIME METRICS (Showing average of the last hour for stability)
+    st.subheader("📊 Real-time Power Flow (Last Hour Average)")
     
-    latest_data = df.iloc[-1]
+    latest_data = df_chart.iloc[-4:].mean() # Average over last hour (4 15-min points)
     mock_battery_level = 0.5 + (datetime.now().minute % 10) * 0.05
     
     col1, col2, col3, col4 = st.columns(4)
@@ -181,8 +210,8 @@ def main_dashboard():
 
     # 3.3 LIVE ENERGY FLOW CHART & FORECASTING
     st.markdown("---")
-    create_energy_flow_chart(df)
-    st.markdown("The dotted red line shows the ML **Demand Forecast**. The orange highlight shows the RL-determined **Battery Discharge Window**.")
+    create_energy_flow_chart(df_chart, df_future)
+    st.markdown("The dotted red line shows the ML **Demand Forecast**. The orange highlight shows the RL-determined **Battery Discharge Window** (Daily peak hour).")
 
     # 3.4 OPTIMIZATION OUTPUTS & IMPACT ANALYSIS
     st.markdown("---")
@@ -192,7 +221,7 @@ def main_dashboard():
     # A. Optimal Schedule (RL Optimization Module Output)
     with colA:
         st.subheader("🤖 Optimal Battery Schedule (RL Engine)")
-        st.info("The Reinforcement Learning engine schedules optimal charging/discharging to boost storage efficiency and maximize savings.")
+        st.info("The Reinforcement Learning engine determines the optimal daily schedule to boost storage efficiency and maximize long-term cost savings.")
         
         schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
         schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
@@ -200,23 +229,24 @@ def main_dashboard():
         
         # Alerts & Efficiency
         st.markdown("<br>", unsafe_allow_html=True)
-        st.warning("⚠️ **Alert**: Anomaly Detected - Consumption is 10% above 24-hr historical average. Check for unoptimized appliances.")
+        st.warning("⚠️ **Alert**: Anomaly Detected - Daily average consumption trending 5% above historical week average. Review load management.")
 
     # B. Savings Calculator (Cost Analysis)
     with colB:
-        st.subheader("💰 Savings & Sustainability Impact")
+        st.subheader("💰 Savings & Sustainability Impact (Based on 168H Simulation)")
         
-        # Calculate impact metrics
-        baseline_import = df['Consumption'].sum()
-        optimized_import = df['Grid_Import'].sum()
+        # Calculate impact metrics based on 168H simulation
+        baseline_import = synthetic_data['Consumption'].sum()
+        optimized_import = synthetic_data['Grid_Import'].sum()
         
-        # Assuming a cost of 10 Rs/KWh
-        estimated_savings = (baseline_import - optimized_import) * 10 
+        # The estimated savings are calculated over the full 168 hours of simulated data
+        estimated_savings_weekly = (baseline_import - optimized_import) * 10 
         
-        daily_savings = estimated_savings * 24 
+        daily_savings = estimated_savings_weekly / 7
+        monthly_savings = estimated_savings_weekly * 4
+        
         daily_co2_savings = daily_savings * 0.8 
-        monthly_savings = daily_savings * 30
-        monthly_co2_savings = daily_co2_savings * 30
+        monthly_co2_savings = monthly_savings * 0.8
 
         colB1, colB2, colB3, colB4 = st.columns(4)
         
@@ -231,6 +261,12 @@ def main_dashboard():
             
         st.markdown("<br>", unsafe_allow_html=True)
         st.write("Displays cost savings compared to baseline, proving the system's real ROI and sustainability impact. Enables residents to lower electricity bills and reduce their carbon footprint.")
+
+    # 4. RAW SYNTHETIC DATA DISPLAY
+    st.markdown("---")
+    with st.expander("📚 View Raw Synthetic Dataset (168 Hours - Input for ML Training)"):
+        st.markdown(f"**Showing 168 hours (7 days) of synthetic data points for scenario: {st.session_state.scenario}.** This data is used by the XGBoost/LSTM module for training.")
+        st.dataframe(synthetic_data, height=300)
 
 if __name__ == "__main__":
     main_dashboard()
