@@ -200,28 +200,23 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     }
 
     # 2. Generate Future Forecast Data (24 hours at 1-hour frequency)
-    # The forecast starts after the last 15-minute interval of historical data
     forecast_start_time = df.index[-1] + timedelta(minutes=15)
     
     # Generate 24 hours of data at 1-hour frequency
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
     df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast', 'Solar_Forecast'])
 
-    # Interpolate a smooth demand/solar profile for the next 24 hours
     future_N = len(df_future)
-    future_consumption_cycle = 0.5 * np.sin(np.linspace(0, 2 * np.pi, future_N)) # One full day cycle
+    future_consumption_cycle = 0.5 * np.sin(np.linspace(0, 2 * np.pi, future_N)) 
     
-    # Base the forecast on the last historical consumption/solar, plus the expected daily cycle
-    last_consumption = df['Consumption'].iloc[-1]
-    last_solar = df['Solar_Gen'].iloc[-1]
+    params = SCENARIOS[scenario_key]
     
-    # Use the consumption trend from the historical data for the 24H forecast
     df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.2
     
-    # Use the solar trend from the historical data for the 24H forecast
     future_solar_hours = df_future.index.hour + df_future.index.minute / 60
     future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_solar_hours - 6) / 12 * np.pi))
     df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.05
+    df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
 
     synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow', 'Net_Energy']].copy()
     synthetic_data.index.name = 'Timestamp'
@@ -229,7 +224,6 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     return synthetic_data, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
-# display_kpi_card and create_energy_flow_chart remain the same as the last working version
 
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
@@ -257,17 +251,11 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
 
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart with a small scroll panel at the bottom."""
-    # NOTE: df_future is not used here for plotting, as it's hourly, 
-    # but we can adjust the end time if needed. The plot uses the historical 168H data.
-    
     fig = go.Figure()
-    # Use the end of the historical 15-min data for the chart's end time, 
-    # as the ML forecast is hourly and can't be easily mixed with 15-min data on the same line.
     end_time_full = df_full.index[-1] + timedelta(minutes=15) 
     
     max_power = df_full['Consumption'].max() * 1.1
     
-    # Set Plotly template for dark theme
     fig.update_layout(template="plotly_dark")
 
     # RL Highlight (unchanged logic)
@@ -281,7 +269,7 @@ def create_energy_flow_chart(df_full, df_future):
             y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
         )
 
-    # DATA TRACES (Colors adjusted for dark theme)
+    # DATA TRACES 
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) 
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
@@ -289,16 +277,11 @@ def create_energy_flow_chart(df_full, df_future):
     fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
 
     # --- FORECAST TRACE (Plot the hourly data as steps/markers starting from the end of historical data) ---
-    # To properly show a forecast extending past the current data, we can plot the hourly points, 
-    # but we will change the legend name to reflect the hourly nature.
-    
-    # Create a small connection point from the last historical data to the first forecast point
     last_historical_time = df_full.index[-1]
     last_historical_consumption = df_full['Consumption'].iloc[-1]
     
     forecast_plot_data = df_future['Demand_Forecast'].copy()
     
-    # Add the last historical point as the start of the forecast line
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
 
@@ -325,7 +308,7 @@ def create_energy_flow_chart(df_full, df_future):
 
     # Scroll Panel Implementation
     fig.update_xaxes(
-        range=[initial_view_start, end_time_full], # Zoom defaults to the end of the historical data
+        range=[initial_view_start, end_time_full],
         rangeslider_visible=True,
         rangeslider_thickness=0.08,
         rangeslider=dict(
@@ -342,6 +325,47 @@ def create_energy_flow_chart(df_full, df_future):
         )
     )
     fig.update_yaxes(range=[0, max_power])
+    st.plotly_chart(fig, use_container_width=True)
+
+# --- NEW FUNCTION: Forecast Chart ---
+def create_forecast_chart(df_future):
+    """Creates a chart showing 24-hour Demand and Solar Forecasts."""
+    fig = go.Figure()
+    fig.update_layout(template="plotly_dark")
+
+    # Demand Forecast
+    fig.add_trace(go.Scatter(
+        x=df_future.index, 
+        y=df_future['Demand_Forecast'], 
+        mode='lines+markers', 
+        name='Demand Forecast (kW)', 
+        line=dict(color='orangered', width=3),
+        marker=dict(size=6)
+    ))
+
+    # Solar Forecast
+    fig.add_trace(go.Scatter(
+        x=df_future.index, 
+        y=df_future['Solar_Forecast'], 
+        mode='lines+markers', 
+        name='Solar Forecast (kW)', 
+        line=dict(color='gold', width=3),
+        marker=dict(size=6)
+    ))
+
+    fig.update_layout(
+        title_text='**24-Hour Hourly Demand & Solar Forecast**',
+        xaxis_title="Hour Start Time",
+        yaxis_title="Power (KW)",
+        height=450,
+        margin=dict(t=50, b=20),
+        legend=dict(orientation="h", yanchor="top", y=1.1, xanchor="left", x=0),
+        paper_bgcolor="#1e212b",
+        plot_bgcolor="#1e212b",
+        xaxis=dict(tickformat="%H:%M", showgrid=True, gridcolor='#333333'),
+        yaxis=dict(showgrid=True, gridcolor='#333333'),
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 # --- 3. PAGE FUNCTIONS ---
@@ -395,7 +419,7 @@ def page_dashboard(synthetic_data, df_future):
 
 
 def page_forecast(df_future):
-    """Displays the forecast model explanation and data."""
+    """Displays the forecast model explanation, chart, and data table."""
     st.title("☀️ Forecast")
     st.write("AI-powered 24 hour prediction of solar generation and demand")
     st.markdown("---")
@@ -411,9 +435,15 @@ def page_forecast(df_future):
     )
 
     st.markdown("<br>")
+    
+    # --- NEW: Forecast Chart ---
+    st.subheader("24-Hour Hourly Forecast Visual")
+    create_forecast_chart(df_future)
+    
+    st.markdown("---")
 
-    # --- CHANGE: Display 24 Hours Prediction ---
-    st.subheader("Next 24 Hours Hourly Prediction")
+    # --- Table Display ---
+    st.subheader("Next 24 Hours Hourly Prediction Table")
     
     st.markdown("""
         <style>
@@ -421,13 +451,13 @@ def page_forecast(df_future):
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 10px;
-                background-color: #1e212b; /* Card background */
-                color: #c0c0c0; /* Text color */
+                background-color: #1e212b; 
+                color: #c0c0c0;
                 border: 1px solid #3a3a3a;
                 border-radius: 10px;
             }
             .dataframe th {
-                background-color: #262730; /* Header background */
+                background-color: #262730; 
                 color: #f0f0f0;
                 padding: 12px 15px;
                 text-align: left;
@@ -441,14 +471,13 @@ def page_forecast(df_future):
                 border-bottom: none;
             }
             .dataframe tbody tr:hover {
-                background-color: #262730; /* Hover effect */
+                background-color: #262730; 
             }
         </style>
     """, unsafe_allow_html=True)
 
     forecast_display = df_future.reset_index()
     forecast_display.columns = ['Hour Start Time', 'Demand Forecast (kW)', 'Solar Forecast (kW)']
-    # Format time to show hour only
     forecast_display['Hour Start Time'] = forecast_display['Hour Start Time'].dt.strftime('%H:00')
     st.dataframe(forecast_display)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
@@ -470,13 +499,13 @@ def page_optimization(synthetic_data, optimal_schedule):
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 10px;
-                background-color: #1e212b; /* Card background */
-                color: #c0c0c0; /* Text color */
+                background-color: #1e212b; 
+                color: #c0c0c0; 
                 border: 1px solid #3a3a3a;
                 border-radius: 10px;
             }
             .optimization-table th {
-                background-color: #262730; /* Header background */
+                background-color: #262730; 
                 color: #f0f0f0;
                 padding: 12px 15px;
                 text-align: left;
@@ -490,7 +519,7 @@ def page_optimization(synthetic_data, optimal_schedule):
                 border-bottom: none;
             }
             .optimization-table tbody tr:hover {
-                background-color: #262730; /* Hover effect */
+                background-color: #262730; 
             }
             .optimization-table .action-green { color: lime; font-weight: bold; }
             .optimization-table .action-red { color: orangered; font-weight: bold; }
