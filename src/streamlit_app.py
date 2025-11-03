@@ -144,13 +144,14 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
     )
 
 # --- 2. LAYOUT UTILITIES ---
+# --- 2. LAYOUT UTILITIES ---
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart WITH the rangeslider (interactive scrollbar)."""
     fig = go.Figure()
     end_time_full = df_full.index[-1] + timedelta(minutes=15) 
     max_power = df_full['Consumption'].max() * 1.1
     
-    # Removed fixed width settings here (CHART_WIDTH = 2000, autosize=False)
+    # Removed fixed width settings 
 
     fig.update_layout(template="plotly_dark")
     params = SCENARIOS[st.session_state.scenario]
@@ -184,10 +185,12 @@ def create_energy_flow_chart(df_full, df_future):
     # CHART LAYOUT ADJUSTMENTS
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
     fig.update_layout(
-        title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
+        # --- FIX: REMOVED THE TITLE TEXT ---
+        title_text='', 
+        
         xaxis_title="Time", yaxis_title="Power (KW)", height=550,
         
-        dragmode='pan', # Set back to pan for better UX with rangeslider removed from drag control
+        dragmode='pan', # Set to pan for easier navigation
         
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
@@ -201,8 +204,8 @@ def create_energy_flow_chart(df_full, df_future):
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
         
-        # *** RESTORE RANGESLIDER CONFIGURATION ***
-        rangeslider_visible=True, # Explicitly set to True
+        # *** RESTORE RANGESLIDER VISIBILITY AND CONFIGURATION ***
+        rangeslider_visible=True, 
         rangeslider_thickness=0.08,
         rangeslider=dict(
             bgcolor="#444444", bordercolor="gray",
