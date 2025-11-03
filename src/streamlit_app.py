@@ -85,14 +85,24 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     df_historical = df_historical.drop(columns=['hour'])
 
     # 4. Generate 24-Hour Hourly Forecast (df_future)
-    # Forecast is based on the last 24 hours of data loaded.
-    forecast_template = df_historical[['Consumption', 'Solar_Gen']].tail(96).resample('1H').mean()
+    
+    # --- FIX APPLIED HERE for InvalidIndexError ---
+    # Calculate the average hourly profile across ALL historical data to ensure unique hours (0-23)
+    
+    # 1. Create a template of the average hourly consumption/solar across ALL historical data
+    hour_map_template = df_historical[['Consumption', 'Solar_Gen']].copy()
+    hour_map_template['hour'] = hour_map_template.index.hour
+    
+    # 2. Group by hour (0-23) to create a unique index map
+    hour_map = hour_map_template.groupby('hour')[['Consumption', 'Solar_Gen']].mean()
+    
+    # END FIX
+    
     forecast_start_time = df_historical.index[-1] + timedelta(minutes=15)
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
     df_future = pd.DataFrame(index=time_index_future)
 
-    hour_map = forecast_template.set_index(forecast_template.index.hour)
-
+    # Use the reliably unique hour_map for forecasting
     df_future['Demand_Forecast'] = df_future.index.hour.map(hour_map['Consumption']) + np.random.rand(len(df_future)) * 0.5
     df_future['Solar_Forecast'] = df_future.index.hour.map(hour_map['Solar_Gen']) + np.random.rand(len(df_future)) * 0.05
     df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
