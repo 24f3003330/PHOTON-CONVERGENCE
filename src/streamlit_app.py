@@ -171,7 +171,7 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     df = pd.DataFrame(index=time_index)
     N = len(df)
 
-    # Data simulation: Daily Cycle Simulation
+    # Data simulation: Daily Cycle Simulation (Historical Data)
     consumption_daily_cycle = 0.5 * np.sin(np.linspace(0, 7 * 2 * np.pi, N))
     df['Consumption'] = params['Base_Consumption'] + consumption_daily_cycle + np.random.rand(N) * 0.2
 
@@ -201,22 +201,41 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
 
     # 2. Generate Future Forecast Data (24 hours at 1-hour frequency)
     forecast_start_time = df.index[-1] + timedelta(minutes=15)
-    
-    # Generate 24 hours of data at 1-hour frequency
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
     df_future = pd.DataFrame(index=time_index_future, columns=['Demand_Forecast', 'Solar_Forecast'])
 
     future_N = len(df_future)
-    future_consumption_cycle = 0.5 * np.sin(np.linspace(0, 2 * np.pi, future_N)) 
     
-    params = SCENARIOS[scenario_key]
+    # --- REALISTIC FORECAST LOGIC CHANGE ---
     
-    df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.2
+    # 1. Base consumption for the next 24 hours (using the average trend)
+    base_forecast_consumption = df['Consumption'].rolling(window=96).mean().iloc[-1] 
     
-    future_solar_hours = df_future.index.hour + df_future.index.minute / 60
-    future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_solar_hours - 6) / 12 * np.pi))
-    df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.05
+    # 2. Create the cyclic pattern for the next 24 hours
+    future_hours = time_index_future.hour + time_index_future.minute / 60
+    
+    # Calculate the normalized sinusoidal pattern for the next day
+    future_consumption_cycle_normalized = np.sin(future_hours / 24 * 2 * np.pi) 
+    
+    # Shift the phase so the peak aligns around 6 PM (18 hours)
+    phase_shift = 6 * (2 * np.pi / 24)
+    future_consumption_cycle = 0.5 * np.sin(future_hours / 24 * 2 * np.pi - phase_shift) 
+
+    # Demand Forecast: Anchor the forecast to a level close to the base, with added cyclicality and noise
+    # We use the Base_Consumption parameter for the general level
+    df_future['Demand_Forecast'] = params['Base_Consumption'] + future_consumption_cycle * 0.8 + np.random.rand(future_N) * 0.1
+    
+    # Solar Forecast: Anchor the solar forecast using the standard solar curve
+    future_solar_cycle = params['Solar_Factor'] * np.maximum(0, np.sin((future_hours - 6) / 12 * np.pi))
+    df_future['Solar_Forecast'] = 0.1 + future_solar_cycle * 0.9 + np.random.rand(future_N) * 0.03
     df_future['Solar_Forecast'] = df_future['Solar_Forecast'].clip(lower=0.0)
+    
+    # Final step for realism: Slightly adjust the first forecast point to match the last historical point
+    # This ensures the line doesn't jump suddenly between historical data and the forecast.
+    last_consumption = df['Consumption'].iloc[-1]
+    last_solar = df['Solar_Gen'].iloc[-1]
+    df_future.loc[df_future.index[0], 'Demand_Forecast'] = last_consumption + (df_future.loc[df_future.index[0], 'Demand_Forecast'] - df_future.loc[df_future.index[1], 'Demand_Forecast']) # Simple linear correction
+    df_future.loc[df_future.index[0], 'Solar_Forecast'] = last_solar + (df_future.loc[df_future.index[0], 'Solar_Forecast'] - df_future.loc[df_future.index[1], 'Solar_Forecast'])
 
     synthetic_data = df[['Consumption', 'Solar_Gen', 'Grid_Import', 'Battery_Flow', 'Net_Energy']].copy()
     synthetic_data.index.name = 'Timestamp'
@@ -282,6 +301,7 @@ def create_energy_flow_chart(df_full, df_future):
     
     forecast_plot_data = df_future['Demand_Forecast'].copy()
     
+    # Ensure the forecast line starts smoothly from the last consumption point
     forecast_plot_data.loc[last_historical_time] = last_historical_consumption
     forecast_plot_data = forecast_plot_data.sort_index()
 
@@ -327,7 +347,6 @@ def create_energy_flow_chart(df_full, df_future):
     fig.update_yaxes(range=[0, max_power])
     st.plotly_chart(fig, use_container_width=True)
 
-# --- NEW FUNCTION: Forecast Chart ---
 def create_forecast_chart(df_future):
     """Creates a chart showing 24-hour Demand and Solar Forecasts."""
     fig = go.Figure()
