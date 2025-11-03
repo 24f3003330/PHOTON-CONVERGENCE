@@ -162,7 +162,7 @@ def main_dashboard():
 
     # 3.2 REAL-TIME METRICS
     st.markdown("---")
-    [cite_start]st.subheader("📊 Real-time Power Flow [cite: 19]")
+    st.subheader("📊 Real-time Power Flow")
     
     latest_data = df.iloc[-1]
     mock_battery_level = 0.5 + (datetime.now().minute % 10) * 0.05
