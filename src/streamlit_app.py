@@ -146,13 +146,13 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
 # --- 2. LAYOUT UTILITIES ---
 # --- 2. LAYOUT UTILITIES ---
 def create_energy_flow_chart(df_full, df_future):
-    """Creates the energy flow chart with drag-to-pan horizontal scrollbar."""
+    """Creates the energy flow chart, forcing a browser horizontal scrollbar (external)."""
     fig = go.Figure()
     end_time_full = df_full.index[-1] + timedelta(minutes=15) 
     max_power = df_full['Consumption'].max() * 1.1
     
     # ----------------------------------------------------------------------
-    # FIX: Define a large fixed width (e.g., 2000px) to force a scrollbar.
+    # FIX: Define a large fixed width (e.g., 2000px) to force an external scrollbar.
     CHART_WIDTH = 2000 
     # ----------------------------------------------------------------------
 
@@ -195,8 +195,8 @@ def create_energy_flow_chart(df_full, df_future):
         width=CHART_WIDTH, 
         autosize=False,
         
-        # *** NEW FIX: Ensure drag mode is set to pan horizontally ***
-        dragmode='pan',
+        # FIX: Reset dragmode to zoom (default) or 'select' to disable pan by default
+        dragmode='zoom', # Set to 'zoom' to prevent drag-to-pan, allowing the scrollbar to be the primary movement control
         
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
@@ -206,7 +206,7 @@ def create_energy_flow_chart(df_full, df_future):
         plot_bgcolor="#1e212b",
     )
     
-    # --- SCROLLBAR/RANGESLIDER LOGIC ---
+    # --- RANGESLIDER LOGIC ---
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
         rangeslider_visible=False, 
@@ -221,11 +221,11 @@ def create_energy_flow_chart(df_full, df_future):
             font=dict(color='#f0f0f0')
         )
     )
-    # --- END SCROLLBAR/RANGESLIDER LOGIC ---
+    # --- END RANGESLIDER LOGIC ---
     
     fig.update_yaxes(range=[0, max_power])
     
-    # Disable Streamlit's default container width setting
+    # FIX: Disable Streamlit's default container width setting to respect fixed width
     st.plotly_chart(fig, use_container_width=False)
 
 def create_forecast_chart(df_future):
