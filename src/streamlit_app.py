@@ -5,9 +5,127 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURATION AND UTILITY FUNCTIONS ---
-# Set the page configuration just once
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
                     initial_sidebar_state="expanded")
+
+# --- Custom CSS for Dark Theme and Card Styling ---
+st.markdown("""
+<style>
+    /* General body and text styling for dark theme */
+    body {
+        color: #e0e0e0; /* Light gray text for readability */
+        background-color: #0e1117; /* Streamlit's default dark background */
+    }
+    h1, h2, h3, h4, h5, h6 {
+        color: #f0f0f0; /* Slightly lighter headings */
+    }
+    p, li {
+        color: #c0c0c0; /* Slightly darker light gray for paragraphs */
+    }
+
+    /* Streamlit widgets for dark theme */
+    .stSelectbox > div > div {
+        background-color: #262730;
+        color: #f0f0f0;
+        border-color: #4f4f4f;
+    }
+    .stSelectbox > label {
+        color: #f0f0f0;
+    }
+    .stRadio > label {
+        color: #f0f0f0;
+    }
+    .stButton > button {
+        background-color: #262730;
+        color: #f0f0f0;
+        border-color: #4f4f4f;
+    }
+
+    /* Custom Card Styling (consistent with the image look) */
+    .st-card {
+        background-color: #1e212b; /* Darker background for cards */
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 15px;
+        border: 1px solid #3a3a3a; /* Subtle border */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Specific styling for KPI cards */
+    .kpi-card {
+        background-color: #1e212b;
+        border-radius: 10px;
+        padding: 15px;
+        text-align: left;
+        border: 1px solid #3a3a3a;
+        height: 100%; /* Ensure uniform height */
+    }
+    .kpi-title {
+        font-size: 14px;
+        color: #909090; /* Lighter gray for titles */
+        margin: 0;
+    }
+    .kpi-value {
+        font-size: 32px;
+        color: #f0f0f0; /* Default value color */
+        margin: 5px 0 0 0;
+        font-weight: bold;
+    }
+    .kpi-unit {
+        font-size: 16px;
+        color: #c0c0c0;
+        font-weight: normal;
+    }
+    
+    /* For the specific report cards */
+    .report-card-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 16px;
+        color: #c0c0c0;
+    }
+    .report-card-value {
+        font-weight: bold;
+        color: #f0f0f0;
+    }
+    /* Specific colors for report items */
+    .color-solar { color: #F9A825; } /* Orange */
+    .color-demand { color: #FF5733; } /* Red-Orange */
+    .color-net-positive { color: #00C853; } /* Green */
+    .color-net-negative { color: #FF5733; } /* Red-Orange for deficit */
+    .color-info { color: #03A9F4; } /* Blue for info */
+
+    /* Custom info/warning boxes */
+    .st.info {
+        background-color: #1e212b; /* Match card background */
+        color: #03A9F4; /* Blue text */
+        border-left: 5px solid #03A9F4;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    .st.warning {
+        background-color: #1e212b; /* Match card background */
+        color: #FFC107; /* Amber text */
+        border-left: 5px solid #FFC107;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    /* Adjust Streamlit info box style */
+    .stAlert {
+        background-color: #1e212b !important;
+        color: #c0c0c0 !important;
+    }
+    .stAlert > div[data-testid="stMarkdownContainer"] p {
+        color: #c0c0c0 !important;
+    }
+
+
+</style>
+""", unsafe_allow_html=True)
+
 
 # Define SCENARIOS
 SCENARIOS = {
@@ -83,15 +201,25 @@ def generate_mock_data(scenario_key, total_hours=168, freq='15Min'):
     return synthetic_data, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
-def display_kpi_card(title, value, unit, color="#268A2E"):
-    """Creates a stylized KPI card."""
+def display_kpi_card(title, value, unit, color="#f0f0f0"): # Default to light for dark theme
+    """Creates a stylized KPI card with custom CSS classes."""
+    # Special handling for Net Energy Flow to change color based on value
+    value_color = color
+    if title == "Net Energy Flow (Now)":
+        if float(value) > 0:
+            value_color = "#00C853" # Green for positive (export/surplus)
+        else:
+            value_color = "#FF5733" # Red for negative (import/deficit)
+    elif title == "Battery Level (Now)":
+        value_color = "#00C853" # Always green for battery
+
     st.markdown(
         f"""
-        <div style="padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #f9f9f9; text-align: left;">
-            <p style="font-size: 14px; color: #6e6e6e; margin: 0;">{title}</p>
-            <h3 style="font-size: 32px; color: {color}; margin: 5px 0 0 0;">
+        <div class="kpi-card">
+            <p class="kpi-title">{title}</p>
+            <h3 class="kpi-value" style="color: {value_color};">
                 {value}
-                <span style="font-size: 16px; color: #333333;">{unit}</span>
+                <span class="kpi-unit">{unit}</span>
             </h3>
         </div>
         """,
@@ -104,6 +232,9 @@ def create_energy_flow_chart(df_full, df_future):
     end_time_full = df_future.index[-1]
     max_power = df_full['Consumption'].max() * 1.1
     
+    # Set Plotly template for dark theme
+    fig.update_layout(template="plotly_dark")
+
     # RL Highlight (unchanged logic)
     params = SCENARIOS[st.session_state.scenario]
     action_hour = params['Peak_Hour']
@@ -115,12 +246,12 @@ def create_energy_flow_chart(df_full, df_future):
             y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
         )
 
-    # DATA TRACES
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,128,0, 0.3)', line=dict(color='green', width=1)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(0,0,255, 0.3)', line=dict(color='blue', width=1)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='orange', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='red', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='purple', width=3)))
+    # DATA TRACES (Colors adjusted for dark theme)
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) # Brighter green
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1))) # Brighter blue
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2))) # Brighter orange
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2))) # Brighter red
+    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3))) # Brighter purple
 
     # ML FORECAST TRACE (30 min)
     fig.add_trace(go.Scatter(
@@ -132,14 +263,17 @@ def create_energy_flow_chart(df_full, df_future):
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
 
     fig.update_layout(
-        title='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
+        title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)', # Using title_text for proper dark theme color
         xaxis_title="Time", yaxis_title="Power (KW)", height=550,
         margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(fixedrange=False), yaxis=dict(fixedrange=False)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')), # Legend text color
+        xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'), # Grid for dark theme
+        yaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
+        paper_bgcolor="#1e212b", # Chart background to match card
+        plot_bgcolor="#1e212b", # Plot area background to match card
     )
 
-    # Scroll Panel Implementation (Fixed Plotly error)
+    # Scroll Panel Implementation
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
         rangeslider_visible=True,
@@ -153,7 +287,8 @@ def create_energy_flow_chart(df_full, df_future):
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
                 dict(count=3, label="3D", step="day", stepmode="backward"),
                 dict(step="all")
-            ])
+            ]),
+            font=dict(color='#f0f0f0') # Rangeselector button text color
         )
     )
     fig.update_yaxes(range=[0, max_power])
@@ -167,18 +302,38 @@ def page_dashboard(synthetic_data, df_future):
     st.write("Live tracking of your energy generation, consumption, and storage, plus optimized flow.")
     st.markdown("---")
     
-    ## 📊 Real-Time Energy Monitoring (Based on image_05e321.jpg)
-    st.header("Real-Time Energy Monitoring")
-    st.write("Live tracking of your energy generation, consumption, and storage")
-    if st.button("Refresh 🔄", key="refresh_monitor"):
-        st.experimental_rerun() # Simple way to simulate refresh
-
+    st.subheader("Real-Time Energy Monitoring")
+    # Refresh button styled like in the image
     st.markdown(
         """
-        <div style="background-color: #f0f0f5; padding: 15px; border-radius: 10px; margin-top: 10px;">
-        <h4 style="margin-top: 0;">About Real-Time Monitoring</h4>
+        <style>
+        div.stButton > button:first-child {
+            background-color: #03A9F4; /* Blue color */
+            color: white;
+            border-radius: 5px;
+            border: 1px solid #03A9F4;
+            padding: 8px 16px;
+            font-size: 16px;
+            display: inline-flex;
+            align-items: center;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #0288d1; /* Darker blue on hover */
+            border-color: #0288d1;
+        }
+        </style>
+        """, unsafe_allow_html=True
+    )
+    if st.button("Refresh 🔄", key="refresh_monitor"):
+        st.experimental_rerun()
+
+    # About Real-Time Monitoring card
+    st.markdown(
+        """
+        <div class="st-card">
+        <h4 style="margin-top: 0; color: #f0f0f0;">About Real-Time Monitoring</h4>
         <p>PHOTON's real-time monitoring provides instant visibility into your energy system. Track solar generation patterns, monitor consumption demands, and observe battery storage levels as they fluctuate throughout the day.</p>
-        <ul>
+        <ul style="color: #c0c0c0;">
             <li>**Solar Generation:** Real-time output from your solar panels in kilowatt-hours</li>
             <li>**Energy Demand:** Current consumption across your building</li>
             <li>**Net Energy:** Surplus (positive) or deficit (negative) balance</li>
@@ -199,15 +354,14 @@ def page_dashboard(synthetic_data, df_future):
     with col2:
         display_kpi_card("Energy Demand (Now)", f"{latest_data['Consumption']:.2f}", "kW", "#FF5733")
     with col3:
-        display_kpi_card("Net Energy Flow (Now)", f"{mock_net_energy_flow:.2f}", "kW", "#00C853" if mock_net_energy_flow > 0 else "#673AB7")
+        display_kpi_card("Net Energy Flow (Now)", f"{mock_net_energy_flow:.2f}", "kW") # Color logic is in display_kpi_card
     with col4:
-        display_kpi_card("Battery Level (Now)", f"{mock_battery_level:.1f}", "%", "#00C853")
+        display_kpi_card("Battery Level (Now)", f"{mock_battery_level:.1f}", "%") # Color logic is in display_kpi_card
     
     st.markdown("---")
     
-    ## 📈 Live Energy Flow Chart & Forecast
     create_energy_flow_chart(synthetic_data, df_future)
-    st.markdown("Use the **small scroll panel at the bottom** to easily slide and view the next 24 hours of data across the full 168-hour timeline.")
+    st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>Use the <b>small scroll panel at the bottom</b> to easily slide and view the next 24 hours of data across the full 168-hour timeline.</p>", unsafe_allow_html=True)
 
 
 def page_forecast(df_future):
@@ -216,11 +370,11 @@ def page_forecast(df_future):
     st.write("AI-powered 24 hour prediction of solar generation and demand")
     st.markdown("---")
     
-    ## 🤖 Model Explained
+    # How it works card
     st.markdown(
         """
-        <div style="padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-        <h4 style="margin-top: 0;">How it works</h4>
+        <div class="st-card">
+        <h4 style="margin-top: 0; color: #f0f0f0;">How it works</h4>
         <p style="margin: 0; font-size: 14px;">A gradient boosting model uses the last 24 hours and time features to predict the next 24 hours. Use this to plan battery usage and grid interactions.</p>
         </div>
         """, unsafe_allow_html=True
@@ -228,13 +382,44 @@ def page_forecast(df_future):
 
     st.markdown("<br>")
 
-    ## 📈 Next 30 Minutes Prediction
     st.subheader("Next 30 Minutes Prediction")
+    # Table styling for dark theme
+    st.markdown("""
+        <style>
+            .dataframe {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                background-color: #1e212b; /* Card background */
+                color: #c0c0c0; /* Text color */
+                border: 1px solid #3a3a3a;
+                border-radius: 10px;
+            }
+            .dataframe th {
+                background-color: #262730; /* Header background */
+                color: #f0f0f0;
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .dataframe td {
+                padding: 10px 15px;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .dataframe tr:last-child td {
+                border-bottom: none;
+            }
+            .dataframe tbody tr:hover {
+                background-color: #262730; /* Hover effect */
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     forecast_display = df_future.head(5).reset_index()
     forecast_display.columns = ['Time', 'Demand Forecast (kW)', 'Solar Forecast (kW)']
     forecast_display['Time'] = forecast_display['Time'].dt.strftime('%H:%M:%S')
-    st.table(forecast_display)
-    st.markdown("The dotted red line on the **Dashboard** shows this demand forecast.")
+    st.dataframe(forecast_display)
+    st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>The dotted red line on the <b>Dashboard</b> shows this demand forecast.</p>", unsafe_allow_html=True)
 
 
 def page_optimization(synthetic_data, optimal_schedule):
@@ -243,24 +428,81 @@ def page_optimization(synthetic_data, optimal_schedule):
     st.write("Reinforcement learning schedule and savings impact for efficient energy management.")
     st.markdown("---")
 
-    ## 🤖 Optimal Battery Schedule
     st.header("Reinforcement Learning Schedule")
     st.info("The Reinforcement Learning engine determines the optimal daily schedule to boost storage efficiency and maximize long-term cost savings.")
 
-    # Schedule Table
+    # Schedule Table (Styled for dark theme)
+    st.markdown("""
+        <style>
+            .optimization-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                background-color: #1e212b; /* Card background */
+                color: #c0c0c0; /* Text color */
+                border: 1px solid #3a3a3a;
+                border-radius: 10px;
+            }
+            .optimization-table th {
+                background-color: #262730; /* Header background */
+                color: #f0f0f0;
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .optimization-table td {
+                padding: 10px 15px;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            .optimization-table tr:last-child td {
+                border-bottom: none;
+            }
+            .optimization-table tbody tr:hover {
+                background-color: #262730; /* Hover effect */
+            }
+            .optimization-table .action-green { color: lime; font-weight: bold; }
+            .optimization-table .action-red { color: orangered; font-weight: bold; }
+            .optimization-table .action-gray { color: gray; font-weight: bold; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Convert schedule_df to HTML with custom classes for action colors
     schedule_df = pd.DataFrame(optimal_schedule).T.reset_index()
     schedule_df.columns = ['Time', 'Action', 'Power (KW)', 'Reason']
-    st.table(schedule_df)
+    
+    # Custom HTML generation for table to apply colors based on 'Action'
+    html_table = '<table class="optimization-table"><thead><tr>'
+    for col in schedule_df.columns:
+        html_table += f'<th>{col}</th>'
+    html_table += '</tr></thead><tbody>'
+    
+    for index, row in schedule_df.iterrows():
+        action_class = ""
+        if "CHARGE" in row['Action'].upper():
+            action_class = "action-green"
+        elif "DISCHARGE" in row['Action'].upper():
+            action_class = "action-red"
+        
+        html_table += '<tr>'
+        html_table += f'<td>{row["Time"]}</td>'
+        html_table += f'<td class="{action_class}">{row["Action"]}</td>'
+        html_table += f'<td>{row["Power (KW)"]:.4f}</td>' # Format power to 4 decimal places
+        html_table += f'<td>{row["Reason"]}</td>'
+        html_table += '</tr>'
+    html_table += '</tbody></table>'
+    
+    st.markdown(html_table, unsafe_allow_html=True)
+
 
     # Action Legend Card
     st.markdown("<br>")
     st.markdown(
         """
-        <div style="padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-        <h4 style="margin-top: 0;">Action legend</h4>
-        <ul>
-            <li><span style="color: green; font-weight: bold;">Green</span>: charge when solar is surplus</li>
-            <li><span style="color: red; font-weight: bold;">Red</span>: discharge during expensive peak hours</li>
+        <div class="st-card">
+        <h4 style="margin-top: 0; color: #f0f0f0;">Action legend</h4>
+        <ul style="color: #c0c0c0;">
+            <li><span style="color: lime; font-weight: bold;">Green</span>: charge when solar is surplus</li>
+            <li><span style="color: orangered; font-weight: bold;">Red</span>: discharge during expensive peak hours</li>
             <li><span style="color: gray; font-weight: bold;">Gray</span>: hold when conditions are neutral</li>
         </ul>
         </div>
@@ -269,7 +511,6 @@ def page_optimization(synthetic_data, optimal_schedule):
     
     st.markdown("---")
     
-    ## 💰 Savings & Sustainability Impact
     st.header("Savings & Sustainability Impact (168H Simulation)")
     
     baseline_import = synthetic_data['Consumption'].sum()
@@ -292,7 +533,7 @@ def page_optimization(synthetic_data, optimal_schedule):
         display_kpi_card("Monthly CO2 Saved", f"{monthly_co2_savings:.2f}", "kg", "#03A9F4")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.write("These metrics display the cost savings compared to a non-optimized baseline, proving the system's real ROI and sustainability impact.")
+    st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>These metrics display the cost savings compared to a non-optimized baseline, proving the system's real ROI and sustainability impact.</p>", unsafe_allow_html=True)
 
 
 def page_reports(synthetic_data):
@@ -317,22 +558,22 @@ def page_reports(synthetic_data):
     # Day Report Card
     with col1:
         st.markdown(f"""
-        <div style="padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-            <h3 style="margin-top: 0; margin-bottom: 20px;">Day Report</h3>
-            <p>☀️ Total Solar <span style="float: right; color: #F9A825; font-weight: bold;">{day_solar_total} kWh</span></p>
-            <p>ᑎ Total Demand <span style="float: right; color: #FF5733; font-weight: bold;">{day_demand_total} kWh</span></p>
-            <p>➕ Net Energy <span style="float: right; color: {'#00C853' if day_net_energy >= 0 else '#FF5733'}; font-weight: bold;">{day_net_energy} kWh</span></p>
+        <div class="st-card">
+            <h3 style="margin-top: 0; margin-bottom: 20px; color: #f0f0f0;">Day Report</h3>
+            <div class="report-card-item">☀️ Total Solar <span class="report-card-value color-solar">{day_solar_total} kWh</span></div>
+            <div class="report-card-item">ᑎ Total Demand <span class="report-card-value color-demand">{day_demand_total} kWh</span></div>
+            <div class="report-card-item">➕ Net Energy <span class="report-card-value {'color-net-positive' if day_net_energy >= 0 else 'color-net-negative'}">{day_net_energy} kWh</span></div>
         </div>
         """, unsafe_allow_html=True)
 
     # Week Report Card
     with col2:
         st.markdown(f"""
-        <div style="padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #ffffff;">
-            <h3 style="margin-top: 0; margin-bottom: 20px;">Week Report</h3>
-            <p>☀️ Total Solar <span style="float: right; color: #F9A825; font-weight: bold;">{week_solar_total} kWh</span></p>
-            <p>ᑎ Total Demand <span style="float: right; color: #FF5733; font-weight: bold;">{week_demand_total} kWh</span></p>
-            <p>➕ Net Energy <span style="float: right; color: {'#00C853' if week_net_energy >= 0 else '#FF5733'}; font-weight: bold;">{week_net_energy} kWh</span></p>
+        <div class="st-card">
+            <h3 style="margin-top: 0; margin-bottom: 20px; color: #f0f0f0;">Week Report</h3>
+            <div class="report-card-item">☀️ Total Solar <span class="report-card-value color-solar">{week_solar_total} kWh</span></div>
+            <div class="report-card-item">ᑎ Total Demand <span class="report-card-value color-demand">{week_demand_total} kWh</span></div>
+            <div class="report-card-item">➕ Net Energy <span class="report-card-value {'color-net-positive' if week_net_energy >= 0 else 'color-net-negative'}">{week_net_energy} kWh</span></div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -341,22 +582,22 @@ def page_reports(synthetic_data):
     # Understanding Optimization Card
     st.markdown(
         """
-        <div style="padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: #ffffff; display: flex; align-items: center;">
-            <div style="font-size: 40px; margin-right: 15px;">💡</div>
+        <div class="st-card" style="display: flex; align-items: center;">
+            <div style="font-size: 40px; margin-right: 15px; color: #F9A825;">💡</div>
             <div>
-                <h4 style="margin: 0 0 5px 0;">Understanding Optimization</h4>
-                <p style="margin: 0; font-size: 14px;">The system charges batteries during solar-rich hours and discharges during high-tariff periods, reducing grid imports and maximizing savings.</p>
+                <h4 style="margin: 0 0 5px 0; color: #f0f0f0;">Understanding Optimization</h4>
+                <p style="margin: 0; font-size: 14px; color: #c0c0c0;">The system charges batteries during solar-rich hours and discharges during high-tariff periods, reducing grid imports and maximizing savings.</p>
             </div>
         </div>
         """, unsafe_allow_html=True
     )
-
 
 # --- 4. DASHBOARD ENTRY POINT ---
 def main_dashboard():
     
     # --- Sidebar Controls ---
     st.sidebar.title("PHO⚡TON")
+    st.sidebar.markdown("---")
     st.sidebar.subheader("Navigation")
     
     page = st.sidebar.radio(
