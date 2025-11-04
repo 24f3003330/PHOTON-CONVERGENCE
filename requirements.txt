@@ -1,5 +1,6 @@
-# REQUIRED LIBRARIES FOR PHOTON DASHBOARD
 streamlit
 pandas
 numpy
 plotly
+xgboost
+scikit-learn
