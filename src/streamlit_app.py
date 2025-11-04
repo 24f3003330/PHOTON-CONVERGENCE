@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from pathlib import Path # Added for robust file path handling
+from pathlib import Path
 
 # --- 1. CONFIGURATION AND UTILITY FUNCTIONS ---
 st.set_page_config(layout="wide", page_title="PHOTON: Smart Energy Optimization Dashboard",
@@ -36,12 +36,17 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     """
     params = SCENARIOS[scenario_key]
     
-    # *** ROBUST PATH LOGIC (Kept from previous correction) ***
+    # *** ROBUST PATH LOGIC ***
     script_dir = Path(__file__).resolve().parent
     csv_path = script_dir / 'energy_data_150days_20households.csv'
 
     # 1. Load and Process Real Data
-    df_raw = pd.read_csv(csv_path)
+    try:
+        df_raw = pd.read_csv(csv_path)
+    except FileNotFoundError:
+        # Re-raise the error if the file is not found, handled in main_dashboard
+        raise
+        
     df_raw['timestamp'] = pd.to_datetime(df_raw['timestamp'])
     df_raw = df_raw.set_index('timestamp').sort_index()
 
@@ -82,15 +87,11 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
 
     # 4. Generate 24-Hour Hourly Forecast (df_future)
     
-    # --- FIX for InvalidIndexError: Generate unique hourly profile map ---
-    # 1. Temporarily add the hour column back (needed for grouping)
+    # --- Generate unique hourly profile map ---
     hour_map_template = df_historical[['Consumption', 'Solar_Gen']].copy()
     hour_map_template['hour'] = hour_map_template.index.hour
-    
-    # 2. Group by hour (0-23) across all historical data and take the mean.
-    # This guarantees a unique index for the map.
     hour_map = hour_map_template.groupby('hour')[['Consumption', 'Solar_Gen']].mean()
-    # ----------------------------------------------------------------------
+    # ----------------------------------------
     
     forecast_start_time = df_historical.index[-1] + timedelta(minutes=15)
     time_index_future = pd.date_range(start=forecast_start_time, end=forecast_start_time + timedelta(hours=24), freq='1H', inclusive='left')
@@ -114,6 +115,7 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     return df_historical, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
+
 def display_kpi_card(title, value, unit, color="#f0f0f0"):
     """Creates a stylized KPI card with custom CSS classes."""
     value_color = color
@@ -137,54 +139,85 @@ def display_kpi_card(title, value, unit, color="#f0f0f0"):
         unsafe_allow_html=True
     )
 
-# --- 2. LAYOUT UTILITIES ---
-def create_energy_flow_chart(df_full, df_future):
-    """Creates the energy flow chart WITH the rangeslider (interactive scrollbar)."""
+def create_energy_flow_chart(df_full, df_future, selected_cols):
+    """
+    Creates the energy flow chart, now filtering traces based on selected_cols.
+    """
     fig = go.Figure()
-    end_time_full = df_full.index[-1] + timedelta(minutes=15) 
+    end_time_full = df_full.index[-1] + timedelta(minutes=15)
     max_power = df_full['Consumption'].max() * 1.1
-    
-    # Removed fixed width settings 
 
+    # Apply the dark theme template
     fig.update_layout(template="plotly_dark")
-    params = SCENARIOS[st.session_state.scenario]
-    action_hour = params['Peak_Hour']
-    latest_peak = df_full[df_full.index.date == df_full.index.date.max()]
-    latest_peak = latest_peak[latest_peak.index.hour == action_hour].index.max()
-    if latest_peak:
-        fig.add_shape(
-            type="rect", x0=latest_peak.replace(minute=0), x1=latest_peak.replace(minute=0) + timedelta(hours=1),
-            y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
-        )
-    # DATA TRACES 
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1))) 
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
-    # --- FORECAST TRACE ---
-    last_historical_time = df_full.index[-1]
-    last_historical_consumption = df_full['Consumption'].iloc[-1]
+
+    # Access session state variables for dynamic elements
+    try:
+        params = SCENARIOS[st.session_state.scenario]
+        action_hour = params['Peak_Hour']
+        latest_peak = df_full[df_full.index.date == df_full.index.date.max()]
+        latest_peak = latest_peak[latest_peak.index.hour == action_hour].index.max()
+        if latest_peak:
+            fig.add_shape(
+                type="rect", x0=latest_peak.replace(minute=0), x1=latest_peak.replace(minute=0) + timedelta(hours=1),
+                y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
+            )
+    except:
+        pass 
+
+    # --- CONDITIONAL DATA TRACES (Filtered by selected_cols) ---
+    
+    # Pre-calculate clipped flows needed for battery traces
+    df_full['Battery_Flow_Discharge'] = df_full['Battery_Flow'].clip(lower=0)
+    df_full['Battery_Flow_Charge'] = df_full['Battery_Flow'].clip(upper=0).abs()
+    
+    # 1. Battery Discharge
+    if 'Battery_Flow_Discharge' in selected_cols:
+        fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow_Discharge'], mode='lines', 
+                                 name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', 
+                                 line=dict(color='lime', width=1)))
+    
+    # 2. Battery Charge
+    if 'Battery_Flow_Charge' in selected_cols:
+        fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow_Charge'], mode='lines', 
+                                 name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', 
+                                 line=dict(color='deepskyblue', width=1)))
         
-    forecast_plot_data = df_future['Demand_Forecast'].copy()
-    forecast_plot_data.loc[last_historical_time] = last_historical_consumption
-    forecast_plot_data = forecast_plot_data.sort_index()
-    fig.add_trace(go.Scatter(
-        x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines', 
-        name='Demand Forecast (ML) - Hourly',
-        line=dict(color='red', dash='dot', width=3), 
-        showlegend=True,
-    ))
-    # CHART LAYOUT ADJUSTMENTS
+    # 3. Solar Generation
+    if 'Solar_Gen' in selected_cols:
+        fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', 
+                                 name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
+        
+    # 4. Household Consumption
+    if 'Consumption' in selected_cols:
+        fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', 
+                                 name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
+        
+    # 5. Grid Consumption (Net Import)
+    if 'Grid_Import' in selected_cols:
+        fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', 
+                                 name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
+        
+    # 6. Demand Forecast (ML) - Hourly
+    if 'Demand_Forecast_Future' in selected_cols:
+        # Connect last historical point to first forecast point
+        last_historical_time = df_full.index[-1]
+        last_historical_consumption = df_full['Consumption'].iloc[-1]
+        forecast_plot_data = df_future['Demand_Forecast'].copy()
+        forecast_plot_data.loc[last_historical_time] = last_historical_consumption
+        forecast_plot_data = forecast_plot_data.sort_index()
+        fig.add_trace(go.Scatter(
+            x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines', 
+            name='Demand Forecast (ML) - Hourly',
+            line=dict(color='red', dash='dot', width=3), 
+            showlegend=True,
+        ))
+
+    # --- CHART LAYOUT ADJUSTMENTS ---
     initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
     fig.update_layout(
-        # --- FIX: REMOVED THE TITLE TEXT ---
         title_text='', 
-        
         xaxis_title="Time", yaxis_title="Power (KW)", height=550,
-        
-        dragmode='pan', # Set to pan for easier navigation
-        
+        dragmode='pan',
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
         xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
@@ -193,19 +226,11 @@ def create_energy_flow_chart(df_full, df_future):
         plot_bgcolor="#1e212b",
     )
     
-    # --- RANGESLIDER RESTORATION ---
+    # --- RANGESLIDER ---
     fig.update_xaxes(
         range=[initial_view_start, end_time_full],
-        
-        # *** RESTORE RANGESLIDER VISIBILITY AND CONFIGURATION ***
-        rangeslider_visible=True, 
-        rangeslider_thickness=0.08,
-        rangeslider=dict(
-            bgcolor="#444444", bordercolor="gray",
-            yaxis=dict(rangemode="fixed", range=[0, max_power])
-        ),
-        # *** END RANGESLIDER CONFIGURATION ***
-        
+        rangeslider_visible=True, rangeslider_thickness=0.08,
+        rangeslider=dict(bgcolor="#444444", bordercolor="gray", yaxis=dict(rangemode="fixed", range=[0, max_power])),
         rangeselector=dict(
             buttons=list([
                 dict(count=24, label="24H", step="hour", stepmode="backward"),
@@ -215,11 +240,8 @@ def create_energy_flow_chart(df_full, df_future):
             font=dict(color='#f0f0f0')
         )
     )
-    # --- END RANGESLIDER LOGIC ---
     
     fig.update_yaxes(range=[0, max_power])
-    
-    # Restore Streamlit's default container width setting
     st.plotly_chart(fig, use_container_width=True)
 
 def create_forecast_chart(df_future):
@@ -243,9 +265,7 @@ def create_forecast_chart(df_future):
         marker=dict(size=6)
     ))
     fig.update_layout(
-        # --- FIX: Removed the chart title by setting title_text to an empty string ---
         title_text='',
-        
         xaxis_title="Hour Start Time",
         yaxis_title="Power (KW)",
         height=450,
@@ -258,7 +278,10 @@ def create_forecast_chart(df_future):
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# --- 3. PAGE FUNCTIONS ---
+# -------------------------------------------------------------
+## 3. Page Functions (Defined before main_dashboard)
+# -------------------------------------------------------------
+
 def page_dashboard(synthetic_data, df_future):
     """Displays the main chart, real-time metrics, and general info."""
     # Display the full time range of the loaded data
@@ -299,8 +322,35 @@ def page_dashboard(synthetic_data, df_future):
         display_kpi_card("Battery Level (Now)", f"{mock_battery_level:.1f}", "%")
 
     st.markdown("---")
+    
+    # --- Data Series Slicer (Multiselect) ---
+    st.subheader("Chart Data Series Selector")
+    
+    # Map display names to internal keys for conditional plotting
+    series_map = {
+        'Household Consumption (Demand)': 'Consumption',
+        'Solar Generation (Supply)': 'Solar_Gen',
+        'Grid Consumption (Net Import)': 'Grid_Import',
+        'Battery Discharge': 'Battery_Flow_Discharge', # Custom key for positive clip
+        'Battery Charge': 'Battery_Flow_Charge',       # Custom key for negative clip
+        'Demand Forecast (ML) - Hourly': 'Demand_Forecast_Future'
+    }
+    
+    default_series = list(series_map.keys()) # All series selected by default
+    
+    selected_series_keys = st.multiselect(
+        "Select Energy Flows to Display on Chart:",
+        options=list(series_map.keys()),
+        default=default_series,
+        key="data_series_slicer"
+    )
 
-    create_energy_flow_chart(synthetic_data, df_future)
+    # Get the list of internal keys to pass to the chart function
+    selected_cols = [series_map[key] for key in selected_series_keys if key in series_map]
+    # --- END NEW SLICER ---
+
+    # Pass the selected columns to the chart function
+    create_energy_flow_chart(synthetic_data, df_future, selected_cols)
     st.markdown("<p style='color: #c0c0c0; font-size: 14px;'>Use the <b>small scroll panel at the bottom</b> to easily slide and view the full historical data timeline.</p>", unsafe_allow_html=True)
 
 def page_forecast(df_future):
@@ -456,7 +506,10 @@ def page_reports(synthetic_data):
         """, unsafe_allow_html=True
     )
 
-# --- 4. DASHBOARD ENTRY POINT ---
+# -------------------------------------------------------------
+## 4. Dashboard Entry Point
+# -------------------------------------------------------------
+
 def main_dashboard():
 
     st.sidebar.title("PHO⚡TON")
@@ -505,7 +558,6 @@ def main_dashboard():
     elif page == "Forecast":
         page_forecast(df_future)
     elif page == "Battery Optimization":
-        # Fixed: Removed the extra df_future argument
         page_optimization(synthetic_data, optimal_schedule)
     elif page == "Reports":
         page_reports(synthetic_data)
