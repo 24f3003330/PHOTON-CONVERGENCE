@@ -114,6 +114,30 @@ def load_energy_data(scenario_key, file_path='energy_data_150days_20households.c
     return df_historical, df_future, optimal_schedule
 
 # --- 2. LAYOUT UTILITIES ---
+def display_kpi_card(title, value, unit, color="#f0f0f0"):
+    """Creates a stylized KPI card with custom CSS classes."""
+    value_color = color
+    if title == "Net Energy Flow (Now)":
+        if float(value) > 0:
+            value_color = "#00C853"
+        else:
+            value_color = "#FF5733"
+    elif title == "Battery Level (Now)":
+        value_color = "#00C853"
+    st.markdown(
+        f"""
+        <div class="kpi-card">
+            <p class="kpi-title">{title}</p>
+            <h3 class="kpi-value" style="color: {value_color};">
+                {value}
+                <span class="kpi-unit">{unit}</span>
+            </h3>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# --- 2. LAYOUT UTILITIES ---
 def create_energy_flow_chart(df_full, df_future):
     """Creates the energy flow chart WITH the rangeslider (interactive scrollbar)."""
     fig = go.Figure()
@@ -198,96 +222,30 @@ def create_energy_flow_chart(df_full, df_future):
     # Restore Streamlit's default container width setting
     st.plotly_chart(fig, use_container_width=True)
 
-def create_energy_flow_chart(df_full, df_future):
-    """Creates the energy flow chart with a scroll panel."""
-    fig = go.Figure()
-    end_time_full = df_full.index[-1] + timedelta(minutes=15)
-    max_power = df_full['Consumption'].max() * 1.1
-    fig.update_layout(template="plotly_dark")
-    params = SCENARIOS[st.session_state.scenario]
-    action_hour = params['Peak_Hour']
-    latest_peak = df_full[df_full.index.date == df_full.index.date.max()]
-    latest_peak = latest_peak[latest_peak.index.hour == action_hour].index.max()
-    if latest_peak:
-        fig.add_shape(
-            type="rect", x0=latest_peak.replace(minute=0), x1=latest_peak.replace(minute=0) + timedelta(hours=1),
-            y0=0, y1=max_power, line=dict(width=0), fillcolor="rgba(255, 165, 0, 0.2)", layer="below"
-        )
-    # DATA TRACES
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(lower=0), mode='lines', name='Battery Discharge', fill='tozeroy', fillcolor='rgba(0,200,0, 0.3)', line=dict(color='lime', width=1)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Battery_Flow'].clip(upper=0).abs(), mode='lines', name='Battery Charge', fill='tozeroy', fillcolor='rgba(100,100,255, 0.3)', line=dict(color='deepskyblue', width=1)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Solar_Gen'], mode='lines', name='Solar Generation (Supply)', line=dict(color='gold', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Consumption'], mode='lines', name='Household Consumption (Demand)', line=dict(color='orangered', width=2)))
-    fig.add_trace(go.Scatter(x=df_full.index, y=df_full['Grid_Import'], mode='lines', name='Grid Consumption (Net Import)', line=dict(color='darkviolet', width=3)))
-    # --- FORECAST TRACE ---
-    last_historical_time = df_full.index[-1]
-    last_historical_consumption = df_full['Consumption'].iloc[-1]
-
-    forecast_plot_data = df_future['Demand_Forecast'].copy()
-    forecast_plot_data.loc[last_historical_time] = last_historical_consumption
-    forecast_plot_data = forecast_plot_data.sort_index()
-    fig.add_trace(go.Scatter(
-        x=forecast_plot_data.index, y=forecast_plot_data.values, mode='lines',
-        name='Demand Forecast (ML) - Hourly',
-        line=dict(color='red', dash='dot', width=3),
-        showlegend=True,
-    ))
-    # CHART LAYOUT ADJUSTMENTS
-    # Sets initial view to the last 24 hours of the *entire* dataset
-    initial_view_start = df_full.index[-96] if len(df_full) >= 96 else df_full.index[0]
-    fig.update_layout(
-        title_text='Energy Flow & **ML-Optimized Dispatch** (24H Default View)',
-        xaxis_title="Time", yaxis_title="Power (KW)", height=550,
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#c0c0c0')),
-        xaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
-        yaxis=dict(fixedrange=False, showgrid=True, gridcolor='#333333', zerolinecolor='#333333'),
-        paper_bgcolor="#1e212b",
-        plot_bgcolor="#1e212b",
-    )
-    # Scroll Panel Implementation
-    fig.update_xaxes(
-        range=[initial_view_start, end_time_full],
-        rangeslider_visible=True,
-        rangeslider_thickness=0.08,
-        rangeslider=dict(
-            bgcolor="#444444", bordercolor="gray",
-            yaxis=dict(rangemode="fixed", range=[0, max_power])
-        ),
-        rangeselector=dict(
-            buttons=list([
-                dict(count=24, label="24H", step="hour", stepmode="backward"),
-                dict(count=3, label="3D", step="day", stepmode="backward"),
-                dict(step="all")
-            ]),
-            font=dict(color='#f0f0f0')
-        )
-    )
-    fig.update_yaxes(range=[0, max_power])
-    st.plotly_chart(fig, use_container_width=True)
-
 def create_forecast_chart(df_future):
     """Creates a chart showing 24-hour Demand and Solar Forecasts."""
     fig = go.Figure()
     fig.update_layout(template="plotly_dark")
     fig.add_trace(go.Scatter(
-        x=df_future.index,
-        y=df_future['Demand_Forecast'],
-        mode='lines+markers',
-        name='Demand Forecast (kW)',
+        x=df_future.index, 
+        y=df_future['Demand_Forecast'], 
+        mode='lines+markers', 
+        name='Demand Forecast (kW)', 
         line=dict(color='orangered', width=3),
         marker=dict(size=6)
     ))
     fig.add_trace(go.Scatter(
-        x=df_future.index,
-        y=df_future['Solar_Forecast'],
-        mode='lines+markers',
-        name='Solar Forecast (kW)',
+        x=df_future.index, 
+        y=df_future['Solar_Forecast'], 
+        mode='lines+markers', 
+        name='Solar Forecast (kW)', 
         line=dict(color='gold', width=3),
         marker=dict(size=6)
     ))
     fig.update_layout(
-        title_text='**24-Hour Hourly Demand & Solar Forecast**',
+        # --- FIX: Removed the chart title by setting title_text to an empty string ---
+        title_text='',
+        
         xaxis_title="Hour Start Time",
         yaxis_title="Power (KW)",
         height=450,
